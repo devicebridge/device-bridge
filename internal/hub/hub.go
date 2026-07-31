@@ -16,17 +16,11 @@ func New() *Hub {
 
 // Register adds a client.
 func (h *Hub) Register(client Client) {
-	if client == nil {
-		return
-	}
 	h.clients[client] = struct{}{}
 }
 
 // Unregister removes a client.
 func (h *Hub) Unregister(client Client) {
-        if client == nil {
-                return
-        }
 	delete(h.clients, client)
 }
 
