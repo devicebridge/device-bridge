@@ -9,6 +9,10 @@ type Bus struct {
 
 // New creates a new message bus.
 func New(size int) *Bus {
+	if size < 0 {
+		panic("bus size cannot be negative")
+	}
+
 	return &Bus{
 		ch: make(chan message.Message, size),
 	}
