@@ -118,3 +118,24 @@ func TestBroadcastError(t *testing.T) {
 		t.Fatal("unexpected error")
 	}
 }
+
+func TestConcurrentAccess(t *testing.T) {
+	h := New()
+
+	done := make(chan struct{})
+
+	go func() {
+		for i := 0; i < 1000; i++ {
+			c := &mockClient{}
+			h.Register(c)
+			h.Unregister(c)
+		}
+		close(done)
+	}()
+
+	for i := 0; i < 1000; i++ {
+		_ = h.Broadcast(message.Message{})
+	}
+
+	<-done
+}
