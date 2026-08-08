@@ -18,7 +18,6 @@ func (m *mockClient) Send(msg message.Message) error {
 	return m.err
 }
 
-
 func TestNew(t *testing.T) {
 	h := New()
 
