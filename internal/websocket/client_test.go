@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/devicebridge/device-bridge/internal/message"
 	"github.com/gorilla/websocket"
@@ -25,6 +26,7 @@ func TestNewClient(t *testing.T) {
 		serverConn = conn
 		close(ready)
 
+		conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 		conn.ReadMessage()
 	}))
 	defer srv.Close()
@@ -58,6 +60,7 @@ func TestSend(t *testing.T) {
 			return
 		}
 
+		conn.SetReadDeadline(time.Now().Add(5 * time.Second))
 		_, data, err := conn.ReadMessage()
 		if err != nil {
 			t.Error(err)
