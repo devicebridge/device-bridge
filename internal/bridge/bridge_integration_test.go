@@ -33,8 +33,6 @@ func TestBridgeHTTPIntegration(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	time.Sleep(100 * time.Millisecond)
-
 	expected := message.Message{
 		Source:    "scanner-main",
 		Timestamp: 1785472345123,
