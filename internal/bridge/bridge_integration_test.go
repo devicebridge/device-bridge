@@ -3,7 +3,6 @@ package bridge_test
 import (
 	"encoding/json"
 	"net/http/httptest"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -33,12 +32,15 @@ func TestBridgeHTTPIntegration(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	defer conn.Close()
 
-	for i := 0; i < 100; i++ {
-		if b.Hub().Count() > 0 {
-			break
+	deadline := time.Now().Add(5 * time.Second)
+
+	for b.Hub().Count() == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("client was not registered")
 		}
-		runtime.Gosched()
+		time.Sleep(10 * time.Millisecond)
 	}
 
 	expected := message.Message{
@@ -51,9 +53,13 @@ func TestBridgeHTTPIntegration(t *testing.T) {
 		t.Fatalf("broadcast failed: %v", err)
 	}
 
+	if err := conn.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+
 	_, data, err := conn.ReadMessage()
 	if err != nil {
-		t.Fatalf("read failed: %v", err)
+		t.Fatalf("message was not received: %v", err)
 	}
 
 	var received message.Message
@@ -75,14 +81,12 @@ func TestBridgeHTTPIntegration(t *testing.T) {
 
 	conn.Close()
 
-	for i := 0; i < 50; i++ {
-		if b.Hub().Count() == 0 {
-			break
+	deadline = time.Now().Add(5 * time.Second)
+
+	for b.Hub().Count() != 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("client was not unregistered")
 		}
 		time.Sleep(10 * time.Millisecond)
-	}
-
-	if b.Hub().Count() != 0 {
-		t.Fatal("client was not unregistered")
 	}
 }
