@@ -5,11 +5,17 @@ import (
 	"net/http"
 
 	"github.com/devicebridge/device-bridge/internal/bridge"
+	"github.com/devicebridge/device-bridge/internal/config"
 	"github.com/devicebridge/device-bridge/internal/server"
 	"github.com/devicebridge/device-bridge/internal/websocket"
 )
 
 func main() {
+	cfg, err := config.Load()
+	if err != nil {
+		log.Fatalf("config error: %v", err)
+	}
+
 	b := bridge.New()
 
 	srv := server.New()
@@ -19,5 +25,5 @@ func main() {
 
 	go b.Run()
 
-	log.Fatal(http.ListenAndServe(":8080", srv.Handler()))
+	log.Fatal(http.ListenAndServe(cfg.ListenAddr(), srv.Handler()))
 }
