@@ -3,6 +3,7 @@ package bridge_test
 import (
 	"encoding/json"
 	"net/http/httptest"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -31,6 +32,13 @@ func TestBridgeHTTPIntegration(t *testing.T) {
 	conn, _, err := gorilla.DefaultDialer.Dial(url, nil)
 	if err != nil {
 		t.Fatal(err)
+	}
+
+	for i := 0; i < 100; i++ {
+		if b.Hub().Count() > 0 {
+			break
+		}
+		runtime.Gosched()
 	}
 
 	expected := message.Message{
@@ -66,9 +74,15 @@ func TestBridgeHTTPIntegration(t *testing.T) {
 	}
 
 	conn.Close()
-	time.Sleep(100 * time.Millisecond)
 
-	if err := b.Hub().Broadcast(message.Message{}); err != nil {
-		t.Fatalf("broadcast after close should succeed, got: %v", err)
+	for i := 0; i < 50; i++ {
+		if b.Hub().Count() == 0 {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if b.Hub().Count() != 0 {
+		t.Fatal("client was not unregistered")
 	}
 }

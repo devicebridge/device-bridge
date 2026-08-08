@@ -35,6 +35,14 @@ func (h *Hub) Unregister(client Client) {
 	delete(h.clients, client)
 }
 
+// Count returns the number of registered clients.
+func (h *Hub) Count() int {
+	h.mu.RLock()
+	defer h.mu.RUnlock()
+
+	return len(h.clients)
+}
+
 // Broadcast sends a message to all registered clients.
 func (h *Hub) Broadcast(msg message.Message) error {
 	h.mu.RLock()
