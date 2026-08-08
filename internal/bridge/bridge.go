@@ -26,3 +26,8 @@ func New() *Bridge {
 func (b *Bridge) Hub() *hub.Hub {
 	return b.hub
 }
+
+// Bus returns the message bus.
+func (b *Bridge) Bus() *bus.Bus {
+	return b.bus
+}
