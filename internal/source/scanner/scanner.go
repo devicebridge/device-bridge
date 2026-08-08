@@ -3,7 +3,6 @@ package scanner
 import (
 	"time"
 
-	"github.com/devicebridge/device-bridge/internal/bus"
 	"github.com/devicebridge/device-bridge/internal/message"
 )
 
@@ -15,18 +14,16 @@ type Input struct {
 type Scanner struct {
 	sourceID string
 	input    <-chan Input
-	bus      *bus.Bus
 }
 
-func New(sourceID string, input <-chan Input, bus *bus.Bus) *Scanner {
+func New(sourceID string, input <-chan Input) *Scanner {
 	return &Scanner{
 		sourceID: sourceID,
 		input:    input,
-		bus:      bus,
 	}
 }
 
-func (s *Scanner) Run(_ chan<- message.Message) error {
+func (s *Scanner) Run(out chan<- message.Message) error {
 	for in := range s.input {
 		if in.Err != nil {
 			return in.Err
@@ -42,7 +39,7 @@ func (s *Scanner) Run(_ chan<- message.Message) error {
 			Payload:   in.Value,
 		}
 
-		s.bus.Publish(msg)
+		out <- msg
 	}
 
 	return nil

@@ -44,3 +44,14 @@ func (r *Registry) Create(name string) (Source, error) {
 
 	return factory(), nil
 }
+
+// Names returns all registered source names.
+func (r *Registry) Names() []string {
+	names := make([]string, 0, len(r.factories))
+
+	for name := range r.factories {
+		names = append(names, name)
+	}
+
+	return names
+}

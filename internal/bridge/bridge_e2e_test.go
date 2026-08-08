@@ -10,6 +10,7 @@ import (
 	"github.com/devicebridge/device-bridge/internal/bridge"
 	"github.com/devicebridge/device-bridge/internal/message"
 	"github.com/devicebridge/device-bridge/internal/server"
+	"github.com/devicebridge/device-bridge/internal/source"
 	"github.com/devicebridge/device-bridge/internal/source/scanner"
 	"github.com/devicebridge/device-bridge/internal/websocket"
 	gorilla "github.com/gorilla/websocket"
@@ -25,6 +26,12 @@ func TestE2ESingleMessage(t *testing.T) {
 
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
+
+	input := make(chan scanner.Input, 1)
+
+	b.Registry().Register("scanner-main", func() source.Source {
+		return scanner.New("scanner-main", input)
+	})
 
 	go b.Run()
 
@@ -43,14 +50,6 @@ func TestE2ESingleMessage(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-
-	input := make(chan scanner.Input, 1)
-	s := scanner.New("scanner-main", input, b.Bus())
-
-	scannerDone := make(chan error, 1)
-	go func() {
-		scannerDone <- s.Run(nil)
-	}()
 
 	input <- scanner.Input{Value: "1234567890123"}
 	close(input)
@@ -80,10 +79,6 @@ func TestE2ESingleMessage(t *testing.T) {
 	if received.Timestamp == 0 {
 		t.Fatal("timestamp not set")
 	}
-
-	if err := <-scannerDone; err != nil {
-		t.Fatalf("scanner error: %v", err)
-	}
 }
 
 func TestE2EMultipleMessages(t *testing.T) {
@@ -96,6 +91,14 @@ func TestE2EMultipleMessages(t *testing.T) {
 
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
+
+	values := []string{"1234567890123", "1234567890456", "1234567890789"}
+
+	input := make(chan scanner.Input, len(values))
+
+	b.Registry().Register("scanner-main", func() source.Source {
+		return scanner.New("scanner-main", input)
+	})
 
 	go b.Run()
 
@@ -114,16 +117,6 @@ func TestE2EMultipleMessages(t *testing.T) {
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-
-	values := []string{"1234567890123", "1234567890456", "1234567890789"}
-
-	input := make(chan scanner.Input, len(values))
-	s := scanner.New("scanner-main", input, b.Bus())
-
-	scannerDone := make(chan error, 1)
-	go func() {
-		scannerDone <- s.Run(nil)
-	}()
 
 	for _, v := range values {
 		input <- scanner.Input{Value: v}
@@ -156,9 +149,5 @@ func TestE2EMultipleMessages(t *testing.T) {
 		if received.Timestamp == 0 {
 			t.Fatalf("message %d: timestamp not set", i)
 		}
-	}
-
-	if err := <-scannerDone; err != nil {
-		t.Fatalf("scanner error: %v", err)
 	}
 }

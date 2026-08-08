@@ -27,7 +27,7 @@ func (b *Bridge) Hub() *hub.Hub {
 	return b.hub
 }
 
-// Bus returns the message bus.
-func (b *Bridge) Bus() *bus.Bus {
-	return b.bus
+// Registry returns the source registry.
+func (b *Bridge) Registry() *source.Registry {
+	return b.registry
 }

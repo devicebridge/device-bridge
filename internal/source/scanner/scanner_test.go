@@ -5,27 +5,27 @@ import (
 	"testing"
 	"time"
 
-	"github.com/devicebridge/device-bridge/internal/bus"
 	"github.com/devicebridge/device-bridge/internal/message"
 	"github.com/devicebridge/device-bridge/internal/source"
 )
 
 func TestPublish(t *testing.T) {
-	b := bus.New(10)
 	input := make(chan Input, 1)
 
-	s := New("scanner-main", input, b)
+	s := New("scanner-main", input)
 
 	before := time.Now().UnixMilli()
 
 	input <- Input{Value: "1234567890123"}
 	close(input)
 
-	if err := s.Run(nil); err != nil {
+	out := make(chan message.Message, 10)
+
+	if err := s.Run(out); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	msg := <-b.Subscribe()
+	msg := <-out
 
 	if msg.Source != "scanner-main" {
 		t.Fatalf("expected source scanner-main, got %q", msg.Source)
@@ -41,10 +41,9 @@ func TestPublish(t *testing.T) {
 }
 
 func TestMultipleMessages(t *testing.T) {
-	b := bus.New(10)
 	input := make(chan Input, 3)
 
-	s := New("scanner-main", input, b)
+	s := New("scanner-main", input)
 
 	values := []string{
 		"1234567890123",
@@ -57,12 +56,14 @@ func TestMultipleMessages(t *testing.T) {
 	}
 	close(input)
 
-	if err := s.Run(nil); err != nil {
+	out := make(chan message.Message, 10)
+
+	if err := s.Run(out); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	for i, expected := range values {
-		msg := <-b.Subscribe()
+		msg := <-out
 
 		if msg.Payload != expected {
 			t.Fatalf("message %d: expected payload %q, got %q", i, expected, msg.Payload)
@@ -70,28 +71,29 @@ func TestMultipleMessages(t *testing.T) {
 	}
 
 	select {
-	case msg := <-b.Subscribe():
+	case msg := <-out:
 		t.Fatalf("unexpected extra message: %+v", msg)
 	default:
 	}
 }
 
 func TestSourceID(t *testing.T) {
-	b := bus.New(10)
 	input := make(chan Input, 2)
 
-	s := New("scanner-main", input, b)
+	s := New("scanner-main", input)
 
 	input <- Input{Value: "AAA"}
 	input <- Input{Value: "BBB"}
 	close(input)
 
-	if err := s.Run(nil); err != nil {
+	out := make(chan message.Message, 10)
+
+	if err := s.Run(out); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
 	for i := 0; i < 2; i++ {
-		msg := <-b.Subscribe()
+		msg := <-out
 		if msg.Source != "scanner-main" {
 			t.Fatalf("message %d: expected source scanner-main, got %q", i, msg.Source)
 		}
@@ -99,80 +101,82 @@ func TestSourceID(t *testing.T) {
 }
 
 func TestInputError(t *testing.T) {
-	b := bus.New(10)
 	input := make(chan Input, 1)
 
-	s := New("scanner-main", input, b)
+	s := New("scanner-main", input)
 
 	expectedErr := fmt.Errorf("input error")
 	input <- Input{Err: expectedErr}
 	close(input)
 
-	err := s.Run(nil)
+	out := make(chan message.Message, 10)
+
+	err := s.Run(out)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
 }
 
 func TestCompletion(t *testing.T) {
-	b := bus.New(10)
 	input := make(chan Input, 1)
 
-	s := New("scanner-main", input, b)
+	s := New("scanner-main", input)
 
 	input <- Input{Value: "test"}
 	close(input)
 
-	if err := s.Run(nil); err != nil {
+	out := make(chan message.Message, 10)
+
+	if err := s.Run(out); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	msg := <-b.Subscribe()
+	msg := <-out
 	if msg.Payload != "test" {
 		t.Fatalf("unexpected payload: %q", msg.Payload)
 	}
 
 	select {
-	case msg := <-b.Subscribe():
+	case msg := <-out:
 		t.Fatalf("unexpected extra message: %+v", msg)
 	default:
 	}
 }
 
 func TestEmptyValue(t *testing.T) {
-	b := bus.New(10)
 	input := make(chan Input, 2)
 
-	s := New("scanner-main", input, b)
+	s := New("scanner-main", input)
 
 	input <- Input{Value: ""}
 	input <- Input{Value: "valid"}
 	close(input)
 
-	if err := s.Run(nil); err != nil {
+	out := make(chan message.Message, 10)
+
+	if err := s.Run(out); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
-	msg := <-b.Subscribe()
+	msg := <-out
 	if msg.Payload != "valid" {
 		t.Fatalf("expected payload valid, got %q", msg.Payload)
 	}
 
 	select {
-	case msg := <-b.Subscribe():
+	case msg := <-out:
 		t.Fatalf("unexpected extra message: %+v", msg)
 	default:
 	}
 }
 
 func TestRegistryIntegration(t *testing.T) {
-	b := bus.New(10)
 	input := make(chan Input, 1)
 
 	registry := source.NewRegistry()
 
 	factory := func() source.Source {
-		return New("scanner-main", input, b)
+		return New("scanner-main", input)
 	}
 
 	if err := registry.Register("scanner-main", factory); err != nil {
@@ -193,23 +197,24 @@ func TestRegistryIntegration(t *testing.T) {
 	input <- Input{Value: "12345"}
 	close(input)
 
-	if err := src.Run(nil); err != nil {
+	out := make(chan message.Message, 10)
+
+	if err := src.Run(out); err != nil {
 		t.Fatalf("run failed: %v", err)
 	}
 
-	msg := <-b.Subscribe()
+	msg := <-out
 	if msg.Payload != "12345" {
 		t.Fatalf("unexpected payload: %q", msg.Payload)
 	}
 }
 
 func TestImplementsSourceInterface(t *testing.T) {
-	b := bus.New(10)
 	input := make(chan Input)
 
 	var _ message.Message = message.Message{}
 
-	s := New("scanner-main", input, b)
+	s := New("scanner-main", input)
 
 	var _ source.Source = s
 }
