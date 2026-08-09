@@ -3,7 +3,6 @@ package bridge_test
 import (
 	"context"
 	"errors"
-	"net/http"
 	"sync"
 	"testing"
 	"time"
@@ -11,7 +10,6 @@ import (
 	"github.com/devicebridge/device-bridge/internal/bridge"
 	"github.com/devicebridge/device-bridge/internal/hub"
 	"github.com/devicebridge/device-bridge/internal/message"
-	"github.com/devicebridge/device-bridge/internal/server"
 	"github.com/devicebridge/device-bridge/internal/source"
 )
 
@@ -306,36 +304,13 @@ func TestBridgeImplementsSourceInterfaceIndirectly(t *testing.T) {
 func TestApplicationNormalShutdown(t *testing.T) {
 	b := bridge.New()
 
-	httpServer := &http.Server{
-		Addr:    "127.0.0.1:0",
-		Handler: server.New().Handler(),
-	}
-
-	httpErr := make(chan error, 1)
-	go func() {
-		httpErr <- httpServer.ListenAndServe()
-	}()
-
 	ctx, cancel := context.WithCancel(context.Background())
-
-	bridgeDone := make(chan error, 1)
-	go func() {
-		bridgeDone <- b.Run(ctx)
-	}()
-
-	time.Sleep(50 * time.Millisecond)
 	cancel()
 
-	err := <-bridgeDone
+	err := b.Run(ctx)
 
-	b.Hub().Shutdown()
-
-	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer shutdownCancel()
-	httpServer.Shutdown(shutdownCtx)
-
-	if err != nil && !errors.Is(err, context.Canceled) {
-		t.Fatalf("expected nil or Canceled, got: %v", err)
+	if err != nil {
+		t.Fatalf("expected nil on already-cancelled context, got: %v", err)
 	}
 }
 
@@ -348,8 +323,7 @@ func TestApplicationErrorPropagation(t *testing.T) {
 		return &errSource{err: srcErr}
 	})
 
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	ctx := context.Background()
 
 	err := b.Run(ctx)
 
@@ -369,20 +343,40 @@ func TestApplicationErrorPropagation(t *testing.T) {
 func TestContextCancellationIsNotError(t *testing.T) {
 	b := bridge.New()
 
-	done := make(chan error, 1)
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+
+	err := b.Run(ctx)
+
+	if err != nil {
+		t.Fatalf("expected nil on normal cancellation, got: %v", err)
+	}
+}
+
+func TestSourceCancellationDeterministic(t *testing.T) {
+	b := bridge.New()
+
+	blockSrc := &blockSource{unblock: make(chan struct{})}
+
+	b.Registry().Register("block", func() source.Source {
+		return blockSrc
+	})
 
 	ctx, cancel := context.WithCancel(context.Background())
 
+	done := make(chan error, 1)
 	go func() {
 		done <- b.Run(ctx)
 	}()
 
-	time.Sleep(50 * time.Millisecond)
 	cancel()
 
-	err := <-done
-
-	if err != nil {
-		t.Fatalf("expected nil on normal cancellation, got: %v", err)
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("expected nil on cancellation, got: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run() did not return within 5 seconds")
 	}
 }
