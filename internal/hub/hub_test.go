@@ -9,13 +9,20 @@ import (
 
 // mockClient is a test implementation of Client.
 type mockClient struct {
-	last message.Message
-	err  error
+	last    message.Message
+	err     error
+	onClose func()
 }
 
 func (m *mockClient) Send(msg message.Message) error {
 	m.last = msg
 	return m.err
+}
+
+func (m *mockClient) Close() {
+	if m.onClose != nil {
+		m.onClose()
+	}
 }
 
 func TestNew(t *testing.T) {
@@ -137,4 +144,71 @@ func TestConcurrentAccess(t *testing.T) {
 	}
 
 	<-done
+}
+
+func TestShutdown(t *testing.T) {
+	h := New()
+
+	closed := make(chan struct{})
+	c := &mockClient{
+		onClose: func() {
+			close(closed)
+		},
+	}
+
+	h.Register(c)
+	h.Shutdown()
+
+	<-closed
+
+	if h.Count() != 1 {
+		t.Fatal("shutdown should not unregister clients")
+	}
+
+	select {
+	case <-h.Done():
+	default:
+		t.Fatal("Done channel should be closed after Shutdown")
+	}
+}
+
+func TestShutdownIdempotent(t *testing.T) {
+	h := New()
+
+	c := &mockClient{}
+	h.Register(c)
+
+	h.Shutdown()
+	h.Shutdown()
+	h.Shutdown()
+
+	// verify no panic
+}
+
+func TestRegisterAfterShutdown(t *testing.T) {
+	h := New()
+
+	h.Shutdown()
+
+	c := &mockClient{}
+	h.Register(c)
+
+	if h.Count() != 0 {
+		t.Fatal("client should not be registered after shutdown")
+	}
+}
+
+func TestBroadcastAfterShutdown(t *testing.T) {
+	h := New()
+
+	c := &mockClient{}
+	h.Register(c)
+
+	h.Shutdown()
+
+	msg := message.Message{Payload: "test"}
+
+	if err := h.Broadcast(msg); err != nil {
+		t.Fatalf("broadcast should return nil after shutdown, got: %v", err)
+	}
 }

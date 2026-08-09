@@ -38,6 +38,8 @@ func (c *runtimeMockClient) Send(msg message.Message) error {
 	return nil
 }
 
+func (c *runtimeMockClient) Close() {}
+
 type runTestSource struct {
 	msg message.Message
 }

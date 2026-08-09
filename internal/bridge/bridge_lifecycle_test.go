@@ -226,6 +226,8 @@ func (c *collectClient) Send(msg message.Message) error {
 	return nil
 }
 
+func (c *collectClient) Close() {}
+
 func TestFirstErrorPreserved(t *testing.T) {
 	b := bridge.New()
 

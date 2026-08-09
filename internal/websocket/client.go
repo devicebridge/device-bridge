@@ -30,3 +30,12 @@ func (c *Client) Send(msg message.Message) error {
 
 	return c.conn.WriteMessage(websocket.TextMessage, data)
 }
+
+func (c *Client) Close() {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+
+	msg := websocket.FormatCloseMessage(websocket.CloseGoingAway, "")
+	c.conn.WriteMessage(websocket.CloseMessage, msg)
+	c.conn.Close()
+}
