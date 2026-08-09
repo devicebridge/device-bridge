@@ -95,3 +95,29 @@ application exits
 ## Результат
 
 Runtime имеет bounded shutdown path: cancellation немедленно прерывает блокирующую публикацию, forwarder завершается, Sources останавливаются, Bus закрывается, `Bridge.Run()` возвращается. Заблокированный downstream не препятствует завершению Runtime.
+
+---
+
+## Fix: Deadlock Broadcast ↔ Shutdown
+
+После PR-0020 обнаружен потенциальный deadlock между `Hub.Broadcast()` и `Hub.Shutdown()`.
+
+### Проблема
+
+`Broadcast()` удерживал `RLock()` во время `client.Send()`. Если `Send()` блокируется, `Shutdown()` не может получить `Lock()` и закрыть клиента.
+
+### Исправление
+
+`Broadcast()` больше не удерживает mutex во время `client.Send()`:
+
+```text
+RLock → snapshot clients → RUnlock → Send() без блокировки
+```
+
+`Shutdown()` может свободно получить `Lock()` и закрыть клиентов через `client.Close()`.
+
+### Тесты
+
+- `TestBlockedDownstreamDoesNotHangShutdown` расширен: проверяет, что `Close()` был вызван и `Send()` был разблокирован после `Hub.Shutdown()`.
+- `TestMultipleSources` переписан на канальную синхронизацию вместо polling с `time.Sleep`.
+- Добавлен `chanClient` для детерминированного ожидания сообщений.

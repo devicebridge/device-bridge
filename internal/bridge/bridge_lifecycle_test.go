@@ -3,7 +3,6 @@ package bridge_test
 import (
 	"context"
 	"errors"
-	"sync"
 	"testing"
 	"time"
 
@@ -175,16 +174,8 @@ func TestMultipleSources(t *testing.T) {
 		{Source: "source-b", Timestamp: 2000, Payload: "BBB"},
 	}
 
-	var mu sync.Mutex
-	var received []message.Message
-
-	client := &collectClient{
-		collect: func(msg message.Message) {
-			mu.Lock()
-			received = append(received, msg)
-			mu.Unlock()
-		},
-	}
+	recvCh := make(chan message.Message, len(messages))
+	client := &chanClient{ch: recvCh}
 
 	b.Hub().Register(client)
 
@@ -203,6 +194,16 @@ func TestMultipleSources(t *testing.T) {
 		done <- b.Run(ctx)
 	}()
 
+	var received []message.Message
+	for i := 0; i < len(messages); i++ {
+		select {
+		case msg := <-recvCh:
+			received = append(received, msg)
+		case <-time.After(5 * time.Second):
+			t.Fatalf("timed out waiting for message %d", i)
+		}
+	}
+
 	select {
 	case err := <-done:
 		if err != nil {
@@ -212,25 +213,21 @@ func TestMultipleSources(t *testing.T) {
 		t.Fatal("Run() did not return within 5 seconds")
 	}
 
-	dl := time.Now().Add(5 * time.Second)
-	for {
-		mu.Lock()
-		count := len(received)
-		mu.Unlock()
-
-		if count >= len(messages) {
-			break
-		}
-		if time.Now().After(dl) {
-			break
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-
 	if len(received) != len(messages) {
 		t.Fatalf("expected %d messages, got %d", len(messages), len(received))
 	}
 }
+
+type chanClient struct {
+	ch chan message.Message
+}
+
+func (c *chanClient) Send(msg message.Message) error {
+	c.ch <- msg
+	return nil
+}
+
+func (c *chanClient) Close() {}
 
 type collectClient struct {
 	collect func(message.Message)
@@ -414,20 +411,30 @@ func (s *floodSource) Run(ctx context.Context, out chan<- message.Message) error
 }
 
 type blockClient struct {
-	ch chan struct{}
+	ch         chan struct{}
+	closeCh    chan struct{}
+	sendCalled chan struct{}
 }
 
 func (c *blockClient) Send(message.Message) error {
+	close(c.sendCalled)
 	<-c.ch
 	return nil
 }
 
-func (c *blockClient) Close() {}
+func (c *blockClient) Close() {
+	close(c.ch)
+	close(c.closeCh)
+}
 
 func TestBlockedDownstreamDoesNotHangShutdown(t *testing.T) {
 	b := bridge.New()
 
-	blocked := &blockClient{ch: make(chan struct{})}
+	blocked := &blockClient{
+		ch:         make(chan struct{}),
+		closeCh:    make(chan struct{}),
+		sendCalled: make(chan struct{}),
+	}
 	b.Hub().Register(blocked)
 
 	fs := &floodSource{n: 200, started: make(chan struct{})}
@@ -445,6 +452,12 @@ func TestBlockedDownstreamDoesNotHangShutdown(t *testing.T) {
 
 	<-fs.started
 
+	select {
+	case <-blocked.sendCalled:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Send was never called")
+	}
+
 	cancel()
 
 	select {
@@ -454,5 +467,19 @@ func TestBlockedDownstreamDoesNotHangShutdown(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("Run() did not return within 5 seconds — blocked downstream caused hang")
+	}
+
+	b.Hub().Shutdown()
+
+	select {
+	case <-blocked.closeCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("blocked client was not closed within 5 seconds after Shutdown")
+	}
+
+	select {
+	case <-blocked.sendCalled:
+	default:
+		t.Fatal("Send was never called")
 	}
 }

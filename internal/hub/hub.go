@@ -55,15 +55,22 @@ func (h *Hub) Count() int {
 // Broadcast sends a message to all registered clients.
 func (h *Hub) Broadcast(msg message.Message) error {
 	h.mu.RLock()
-	defer h.mu.RUnlock()
 
 	select {
 	case <-h.closed:
+		h.mu.RUnlock()
 		return nil
 	default:
 	}
 
+	clients := make([]Client, 0, len(h.clients))
 	for client := range h.clients {
+		clients = append(clients, client)
+	}
+
+	h.mu.RUnlock()
+
+	for _, client := range clients {
 		if err := client.Send(msg); err != nil {
 			return err
 		}
