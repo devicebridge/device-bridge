@@ -3,6 +3,7 @@ package bridge_test
 import (
 	"context"
 	"errors"
+	"net/http"
 	"sync"
 	"testing"
 	"time"
@@ -10,6 +11,7 @@ import (
 	"github.com/devicebridge/device-bridge/internal/bridge"
 	"github.com/devicebridge/device-bridge/internal/hub"
 	"github.com/devicebridge/device-bridge/internal/message"
+	"github.com/devicebridge/device-bridge/internal/server"
 	"github.com/devicebridge/device-bridge/internal/source"
 )
 
@@ -299,4 +301,88 @@ func TestBridgeImplementsSourceInterfaceIndirectly(t *testing.T) {
 	}
 
 	var _ *hub.Hub = b.Hub()
+}
+
+func TestApplicationNormalShutdown(t *testing.T) {
+	b := bridge.New()
+
+	httpServer := &http.Server{
+		Addr:    "127.0.0.1:0",
+		Handler: server.New().Handler(),
+	}
+
+	httpErr := make(chan error, 1)
+	go func() {
+		httpErr <- httpServer.ListenAndServe()
+	}()
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	bridgeDone := make(chan error, 1)
+	go func() {
+		bridgeDone <- b.Run(ctx)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	err := <-bridgeDone
+
+	b.Hub().Shutdown()
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+	httpServer.Shutdown(shutdownCtx)
+
+	if err != nil && !errors.Is(err, context.Canceled) {
+		t.Fatalf("expected nil or Canceled, got: %v", err)
+	}
+}
+
+func TestApplicationErrorPropagation(t *testing.T) {
+	b := bridge.New()
+
+	srcErr := errors.New("source failed")
+
+	b.Registry().Register("err", func() source.Source {
+		return &errSource{err: srcErr}
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	err := b.Run(ctx)
+
+	if err == nil {
+		t.Fatal("expected error, got nil")
+	}
+
+	if errors.Is(err, context.Canceled) {
+		t.Fatal("source error should not be treated as Canceled")
+	}
+
+	if !errors.Is(err, srcErr) {
+		t.Fatalf("expected source error, got: %v", err)
+	}
+}
+
+func TestContextCancellationIsNotError(t *testing.T) {
+	b := bridge.New()
+
+	done := make(chan error, 1)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	go func() {
+		done <- b.Run(ctx)
+	}()
+
+	time.Sleep(50 * time.Millisecond)
+	cancel()
+
+	err := <-done
+
+	if err != nil {
+		t.Fatalf("expected nil on normal cancellation, got: %v", err)
+	}
 }

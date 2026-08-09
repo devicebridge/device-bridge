@@ -2,8 +2,12 @@ package main
 
 import (
 	"context"
+	"errors"
 	"log"
 	"net/http"
+	"os"
+	"os/signal"
+	"syscall"
 	"time"
 
 	"github.com/devicebridge/device-bridge/internal/bridge"
@@ -32,9 +36,12 @@ func main() {
 		Handler: srv.Handler(),
 	}
 
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stop()
+
 	bridgeDone := make(chan error, 1)
 	go func() {
-		bridgeDone <- b.Run(context.Background())
+		bridgeDone <- b.Run(ctx)
 	}()
 
 	go func() {
@@ -45,9 +52,6 @@ func main() {
 	}()
 
 	err = <-bridgeDone
-	if err != nil {
-		log.Printf("bridge error: %v", err)
-	}
 
 	b.Hub().Shutdown()
 
@@ -56,5 +60,10 @@ func main() {
 
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
 		log.Printf("http shutdown error: %v", err)
+	}
+
+	if err != nil && !errors.Is(err, context.Canceled) {
+		log.Printf("bridge error: %v", err)
+		os.Exit(1)
 	}
 }
