@@ -45,6 +45,24 @@ func (s *publishSource) Run(_ context.Context, out chan<- message.Message) error
 	return nil
 }
 
+type cancPublishSource struct {
+	msgs    []message.Message
+	blockCh chan struct{}
+}
+
+func (s *cancPublishSource) Run(ctx context.Context, out chan<- message.Message) error {
+	close(s.blockCh)
+
+	for _, msg := range s.msgs {
+		select {
+		case out <- msg:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
+}
+
 func TestNormalShutdown(t *testing.T) {
 	b := bridge.New()
 
@@ -61,7 +79,6 @@ func TestNormalShutdown(t *testing.T) {
 		done <- b.Run(ctx)
 	}()
 
-	time.Sleep(50 * time.Millisecond)
 	cancel()
 
 	select {
@@ -179,15 +196,12 @@ func TestMultipleSources(t *testing.T) {
 		return &publishSource{msgs: messages[1:]}
 	})
 
-	ctx, cancel := context.WithCancel(context.Background())
+	ctx := context.Background()
 
 	done := make(chan error, 1)
 	go func() {
 		done <- b.Run(ctx)
 	}()
-
-	time.Sleep(200 * time.Millisecond)
-	cancel()
 
 	select {
 	case err := <-done:
@@ -236,6 +250,42 @@ func TestFirstErrorPreserved(t *testing.T) {
 
 	if !errors.Is(err, srcErrA) && !errors.Is(err, srcErrB) {
 		t.Fatalf("expected one of the source errors, got: %v", err)
+	}
+}
+
+func TestCancellationDuringPublishing(t *testing.T) {
+	b := bridge.New()
+
+	messages := []message.Message{
+		{Source: "s", Timestamp: 1, Payload: "A"},
+		{Source: "s", Timestamp: 2, Payload: "B"},
+		{Source: "s", Timestamp: 3, Payload: "C"},
+	}
+
+	blockCh := make(chan struct{})
+
+	b.Registry().Register("s", func() source.Source {
+		return &cancPublishSource{msgs: messages, blockCh: blockCh}
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan error, 1)
+	go func() {
+		done <- b.Run(ctx)
+	}()
+
+	<-blockCh
+
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run() did not return within 5 seconds")
 	}
 }
 
