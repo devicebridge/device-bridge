@@ -1,6 +1,10 @@
 package bus
 
-import "github.com/devicebridge/device-bridge/internal/message"
+import (
+	"context"
+
+	"github.com/devicebridge/device-bridge/internal/message"
+)
 
 // Bus transports messages between producers and consumers.
 type Bus struct {
@@ -21,6 +25,17 @@ func New(size int) *Bus {
 // Publish sends a message to the bus.
 func (b *Bus) Publish(msg message.Message) {
 	b.ch <- msg
+}
+
+// PublishCtx sends a message to the bus or returns an error if
+// the context is cancelled before the message can be sent.
+func (b *Bus) PublishCtx(ctx context.Context, msg message.Message) error {
+	select {
+	case b.ch <- msg:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }
 
 // Subscribe returns a receive-only message channel.

@@ -212,8 +212,23 @@ func TestMultipleSources(t *testing.T) {
 		t.Fatal("Run() did not return within 5 seconds")
 	}
 
-	if len(received) != 2 {
-		t.Fatalf("expected 2 messages, got %d", len(received))
+	dl := time.Now().Add(5 * time.Second)
+	for {
+		mu.Lock()
+		count := len(received)
+		mu.Unlock()
+
+		if count >= len(messages) {
+			break
+		}
+		if time.Now().After(dl) {
+			break
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	if len(received) != len(messages) {
+		t.Fatalf("expected %d messages, got %d", len(messages), len(received))
 	}
 }
 
@@ -378,5 +393,66 @@ func TestSourceCancellationDeterministic(t *testing.T) {
 		}
 	case <-time.After(5 * time.Second):
 		t.Fatal("Run() did not return within 5 seconds")
+	}
+}
+
+type floodSource struct {
+	n       int
+	started chan struct{}
+}
+
+func (s *floodSource) Run(ctx context.Context, out chan<- message.Message) error {
+	close(s.started)
+	for i := 0; i < s.n; i++ {
+		select {
+		case out <- message.Message{Payload: "data"}:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+	return nil
+}
+
+type blockClient struct {
+	ch chan struct{}
+}
+
+func (c *blockClient) Send(message.Message) error {
+	<-c.ch
+	return nil
+}
+
+func (c *blockClient) Close() {}
+
+func TestBlockedDownstreamDoesNotHangShutdown(t *testing.T) {
+	b := bridge.New()
+
+	blocked := &blockClient{ch: make(chan struct{})}
+	b.Hub().Register(blocked)
+
+	fs := &floodSource{n: 200, started: make(chan struct{})}
+
+	b.Registry().Register("flood", func() source.Source {
+		return fs
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan error, 1)
+	go func() {
+		done <- b.Run(ctx)
+	}()
+
+	<-fs.started
+
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("expected nil on cancellation with blocked downstream, got: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run() did not return within 5 seconds — blocked downstream caused hang")
 	}
 }

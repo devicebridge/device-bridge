@@ -44,14 +44,28 @@ func main() {
 		bridgeDone <- b.Run(ctx)
 	}()
 
+	httpFatal := make(chan error, 1)
 	go func() {
 		err := httpServer.ListenAndServe()
 		if err != nil && err != http.ErrServerClosed {
-			log.Printf("http server error: %v", err)
+			httpFatal <- err
 		}
 	}()
 
-	err = <-bridgeDone
+	var appErr error
+
+	select {
+	case err := <-bridgeDone:
+		appErr = err
+	case err := <-httpFatal:
+		log.Printf("http server error: %v", err)
+		appErr = err
+		stop()
+		bridgeErr := <-bridgeDone
+		if bridgeErr != nil && !errors.Is(bridgeErr, context.Canceled) {
+			log.Printf("bridge error: %v", bridgeErr)
+		}
+	}
 
 	b.Hub().Shutdown()
 
@@ -62,8 +76,7 @@ func main() {
 		log.Printf("http shutdown error: %v", err)
 	}
 
-	if err != nil && !errors.Is(err, context.Canceled) {
-		log.Printf("bridge error: %v", err)
+	if appErr != nil && !errors.Is(appErr, context.Canceled) {
 		os.Exit(1)
 	}
 }
