@@ -1,35 +1,75 @@
 package bridge
 
 import (
+	"context"
+	"sync"
+
 	"github.com/devicebridge/device-bridge/internal/message"
 	"github.com/devicebridge/device-bridge/internal/source"
 )
 
 // Run starts the bridge runtime.
-func (b *Bridge) Run() {
+func (b *Bridge) Run(ctx context.Context) error {
+	runtimeCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
+	var (
+		wg       sync.WaitGroup
+		firstErr error
+		errOnce  sync.Once
+	)
+
 	for _, name := range b.registry.Names() {
 		src, err := b.registry.Create(name)
 		if err != nil {
 			continue
 		}
 
-		go b.connectSource(src)
+		wg.Add(1)
+		go b.connectSource(runtimeCtx, src, &wg, &firstErr, &errOnce, cancel)
 	}
 
-	for msg := range b.bus.Subscribe() {
-		_ = b.hub.Broadcast(msg)
-	}
-}
-
-func (b *Bridge) connectSource(src source.Source) {
-	out := make(chan message.Message, 100)
-
+	hubDone := make(chan struct{})
 	go func() {
-		defer close(out)
-		_ = src.Run(out)
+		defer close(hubDone)
+		for msg := range b.bus.Subscribe() {
+			_ = b.hub.Broadcast(msg)
+		}
 	}()
 
-	for msg := range out {
-		b.bus.Publish(msg)
+	wg.Wait()
+
+	b.bus.Close()
+	<-hubDone
+
+	return firstErr
+}
+
+func (b *Bridge) connectSource(ctx context.Context, src source.Source, wg *sync.WaitGroup, firstErr *error, errOnce *sync.Once, cancel context.CancelFunc) {
+	defer wg.Done()
+
+	out := make(chan message.Message, 100)
+
+	sourceDone := make(chan error, 1)
+	go func() {
+		defer close(out)
+		sourceDone <- src.Run(ctx, out)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for msg := range out {
+			b.bus.Publish(msg)
+		}
+	}()
+
+	err := <-sourceDone
+
+	if err != nil && err != context.Canceled {
+		errOnce.Do(func() {
+			*firstErr = err
+			cancel()
+		})
 	}
 }

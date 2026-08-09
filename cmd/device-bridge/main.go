@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"log"
 	"net/http"
 
@@ -23,7 +24,7 @@ func main() {
 	wsHandler := websocket.NewHandler(b.Hub())
 	srv.Handle("/ws", wsHandler)
 
-	go b.Run()
+	go b.Run(context.Background())
 
 	log.Fatal(http.ListenAndServe(cfg.ListenAddr(), srv.Handler()))
 }

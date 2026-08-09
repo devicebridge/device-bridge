@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"time"
 
 	"github.com/devicebridge/device-bridge/internal/message"
@@ -23,24 +24,36 @@ func New(sourceID string, input <-chan Input) *Scanner {
 	}
 }
 
-func (s *Scanner) Run(out chan<- message.Message) error {
-	for in := range s.input {
-		if in.Err != nil {
-			return in.Err
-		}
+func (s *Scanner) Run(ctx context.Context, out chan<- message.Message) error {
+	for {
+		select {
+		case in, ok := <-s.input:
+			if !ok {
+				return nil
+			}
 
-		if in.Value == "" {
-			continue
-		}
+			if in.Err != nil {
+				return in.Err
+			}
 
-		msg := message.Message{
-			Source:    s.sourceID,
-			Timestamp: time.Now().UnixMilli(),
-			Payload:   in.Value,
-		}
+			if in.Value == "" {
+				continue
+			}
 
-		out <- msg
+			msg := message.Message{
+				Source:    s.sourceID,
+				Timestamp: time.Now().UnixMilli(),
+				Payload:   in.Value,
+			}
+
+			select {
+			case out <- msg:
+			case <-ctx.Done():
+				return ctx.Err()
+			}
+
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
-
-	return nil
 }

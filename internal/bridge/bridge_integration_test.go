@@ -1,6 +1,7 @@
 package bridge_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http/httptest"
 	"strings"
@@ -25,7 +26,7 @@ func TestBridgeHTTPIntegration(t *testing.T) {
 	ts := httptest.NewServer(srv.Handler())
 	defer ts.Close()
 
-	go b.Run()
+	go b.Run(context.Background())
 
 	url := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws"
 	conn, _, err := gorilla.DefaultDialer.Dial(url, nil)

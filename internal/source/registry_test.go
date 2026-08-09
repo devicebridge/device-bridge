@@ -1,6 +1,7 @@
 package source
 
 import (
+	"context"
 	"testing"
 
 	"github.com/devicebridge/device-bridge/internal/message"
@@ -8,7 +9,7 @@ import (
 
 type registryMockSource struct{}
 
-func (registryMockSource) Run(chan<- message.Message) error {
+func (registryMockSource) Run(context.Context, chan<- message.Message) error {
 	return nil
 }
 

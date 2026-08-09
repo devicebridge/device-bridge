@@ -27,3 +27,8 @@ func (b *Bus) Publish(msg message.Message) {
 func (b *Bus) Subscribe() <-chan message.Message {
 	return b.ch
 }
+
+// Close closes the bus, preventing further publishes.
+func (b *Bus) Close() {
+	close(b.ch)
+}

@@ -1,6 +1,7 @@
 package scanner
 
 import (
+	"context"
 	"fmt"
 	"testing"
 	"time"
@@ -21,7 +22,7 @@ func TestPublish(t *testing.T) {
 
 	out := make(chan message.Message, 10)
 
-	if err := s.Run(out); err != nil {
+	if err := s.Run(context.Background(), out); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -58,7 +59,7 @@ func TestMultipleMessages(t *testing.T) {
 
 	out := make(chan message.Message, 10)
 
-	if err := s.Run(out); err != nil {
+	if err := s.Run(context.Background(), out); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -88,7 +89,7 @@ func TestSourceID(t *testing.T) {
 
 	out := make(chan message.Message, 10)
 
-	if err := s.Run(out); err != nil {
+	if err := s.Run(context.Background(), out); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -111,7 +112,7 @@ func TestInputError(t *testing.T) {
 
 	out := make(chan message.Message, 10)
 
-	err := s.Run(out)
+	err := s.Run(context.Background(), out)
 	if err == nil {
 		t.Fatal("expected error, got nil")
 	}
@@ -127,7 +128,7 @@ func TestCompletion(t *testing.T) {
 
 	out := make(chan message.Message, 10)
 
-	if err := s.Run(out); err != nil {
+	if err := s.Run(context.Background(), out); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -154,7 +155,7 @@ func TestEmptyValue(t *testing.T) {
 
 	out := make(chan message.Message, 10)
 
-	if err := s.Run(out); err != nil {
+	if err := s.Run(context.Background(), out); err != nil {
 		t.Fatalf("unexpected error: %v", err)
 	}
 
@@ -167,6 +168,28 @@ func TestEmptyValue(t *testing.T) {
 	case msg := <-out:
 		t.Fatalf("unexpected extra message: %+v", msg)
 	default:
+	}
+}
+
+func TestCancellation(t *testing.T) {
+	input := make(chan Input)
+
+	s := New("scanner-main", input)
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	out := make(chan message.Message, 10)
+
+	done := make(chan error, 1)
+	go func() {
+		done <- s.Run(ctx, out)
+	}()
+
+	cancel()
+
+	err := <-done
+	if err != context.Canceled {
+		t.Fatalf("expected context.Canceled, got %v", err)
 	}
 }
 
@@ -199,7 +222,7 @@ func TestRegistryIntegration(t *testing.T) {
 
 	out := make(chan message.Message, 10)
 
-	if err := src.Run(out); err != nil {
+	if err := src.Run(context.Background(), out); err != nil {
 		t.Fatalf("run failed: %v", err)
 	}
 

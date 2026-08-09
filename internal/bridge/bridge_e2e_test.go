@@ -1,6 +1,7 @@
 package bridge_test
 
 import (
+	"context"
 	"encoding/json"
 	"net/http/httptest"
 	"strings"
@@ -33,7 +34,10 @@ func TestE2ESingleMessage(t *testing.T) {
 		return scanner.New("scanner-main", input)
 	})
 
-	go b.Run()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go b.Run(ctx)
 
 	url := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws"
 	conn, _, err := gorilla.DefaultDialer.Dial(url, nil)
@@ -100,7 +104,10 @@ func TestE2EMultipleMessages(t *testing.T) {
 		return scanner.New("scanner-main", input)
 	})
 
-	go b.Run()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go b.Run(ctx)
 
 	url := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws"
 	conn, _, err := gorilla.DefaultDialer.Dial(url, nil)

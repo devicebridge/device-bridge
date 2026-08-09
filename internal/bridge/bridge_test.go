@@ -1,9 +1,12 @@
 package bridge
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/devicebridge/device-bridge/internal/message"
+	"github.com/devicebridge/device-bridge/internal/source"
 )
 
 func TestNew(t *testing.T) {
@@ -26,13 +29,21 @@ func TestNew(t *testing.T) {
 	}
 }
 
-// runtimeMockClient is a test implementation of hub.Client.
 type runtimeMockClient struct {
 	received chan message.Message
 }
 
 func (c *runtimeMockClient) Send(msg message.Message) error {
 	c.received <- msg
+	return nil
+}
+
+type runTestSource struct {
+	msg message.Message
+}
+
+func (s *runTestSource) Run(_ context.Context, out chan<- message.Message) error {
+	out <- s.msg
 	return nil
 }
 
@@ -45,19 +56,38 @@ func TestRun(t *testing.T) {
 
 	b.hub.Register(client)
 
-	go b.Run()
-
 	expected := message.Message{
 		Source:    "scanner-main",
 		Timestamp: 1785472345123,
 		Payload:   "1234567890",
 	}
 
-	b.bus.Publish(expected)
+	b.Registry().Register("test", func() source.Source {
+		return &runTestSource{msg: expected}
+	})
 
-	actual := <-client.received
+	ctx := context.Background()
 
-	if actual != expected {
-		t.Fatal("unexpected message")
+	done := make(chan error, 1)
+	go func() {
+		done <- b.Run(ctx)
+	}()
+
+	select {
+	case actual := <-client.received:
+		if actual != expected {
+			t.Fatal("unexpected message")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("did not receive message")
+	}
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run() did not return")
 	}
 }
