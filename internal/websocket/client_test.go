@@ -5,6 +5,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -108,5 +109,159 @@ func TestSend(t *testing.T) {
 
 	if received.Payload != expected.Payload {
 		t.Fatalf("payload mismatch: expected %q, got %q", expected.Payload, received.Payload)
+	}
+}
+
+func TestCloseDoesNotWaitForMutex(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upgrader := websocket.Upgrader{}
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		conn.ReadMessage()
+	}))
+	defer srv.Close()
+
+	url := "ws" + strings.TrimPrefix(srv.URL, "http")
+	clientConn, _, err := websocket.DefaultDialer.Dial(url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clientConn.Close()
+
+	c := NewClient(clientConn)
+
+	c.mu.Lock()
+
+	closeDone := make(chan struct{})
+	go func() {
+		c.Close()
+		close(closeDone)
+	}()
+
+	select {
+	case <-closeDone:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Close() blocked on mutex held by Send")
+	}
+
+	c.mu.Unlock()
+}
+
+func TestCloseIdempotent(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upgrader := websocket.Upgrader{}
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		conn.ReadMessage()
+	}))
+	defer srv.Close()
+
+	url := "ws" + strings.TrimPrefix(srv.URL, "http")
+	clientConn, _, err := websocket.DefaultDialer.Dial(url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clientConn.Close()
+
+	c := NewClient(clientConn)
+
+	c.Close()
+	c.Close()
+	c.Close()
+}
+
+func TestSendAfterClose(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upgrader := websocket.Upgrader{}
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		conn.ReadMessage()
+	}))
+	defer srv.Close()
+
+	url := "ws" + strings.TrimPrefix(srv.URL, "http")
+	clientConn, _, err := websocket.DefaultDialer.Dial(url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clientConn.Close()
+
+	c := NewClient(clientConn)
+
+	c.Close()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- c.Send(message.Message{Payload: "test"})
+	}()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected error after close, got nil")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Send() did not return after Close()")
+	}
+}
+
+func TestConcurrentSendAndClose(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		upgrader := websocket.Upgrader{}
+		conn, err := upgrader.Upgrade(w, r, nil)
+		if err != nil {
+			t.Error(err)
+			return
+		}
+		conn.ReadMessage()
+	}))
+	defer srv.Close()
+
+	url := "ws" + strings.TrimPrefix(srv.URL, "http")
+	clientConn, _, err := websocket.DefaultDialer.Dial(url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer clientConn.Close()
+
+	c := NewClient(clientConn)
+
+	var wg sync.WaitGroup
+	wg.Add(3)
+
+	go func() {
+		defer wg.Done()
+		c.Send(message.Message{Payload: "1"})
+	}()
+
+	go func() {
+		defer wg.Done()
+		c.Send(message.Message{Payload: "2"})
+	}()
+
+	go func() {
+		defer wg.Done()
+		c.Close()
+	}()
+
+	done := make(chan struct{})
+	go func() {
+		wg.Wait()
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("concurrent Send+Close did not complete")
 	}
 }

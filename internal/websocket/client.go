@@ -9,8 +9,9 @@ import (
 )
 
 type Client struct {
-	conn *websocket.Conn
-	mu   sync.Mutex
+	conn      *websocket.Conn
+	mu        sync.Mutex
+	closeOnce sync.Once
 }
 
 func NewClient(conn *websocket.Conn) *Client {
@@ -32,10 +33,12 @@ func (c *Client) Send(msg message.Message) error {
 }
 
 func (c *Client) Close() {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-
-	msg := websocket.FormatCloseMessage(websocket.CloseGoingAway, "")
-	c.conn.WriteMessage(websocket.CloseMessage, msg)
-	c.conn.Close()
+	c.closeOnce.Do(func() {
+		if c.mu.TryLock() {
+			msg := websocket.FormatCloseMessage(websocket.CloseGoingAway, "")
+			c.conn.WriteMessage(websocket.CloseMessage, msg)
+			c.mu.Unlock()
+		}
+		c.conn.Close()
+	})
 }
