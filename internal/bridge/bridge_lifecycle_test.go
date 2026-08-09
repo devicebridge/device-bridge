@@ -3,6 +3,7 @@ package bridge_test
 import (
 	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -411,20 +412,26 @@ func (s *floodSource) Run(ctx context.Context, out chan<- message.Message) error
 }
 
 type blockClient struct {
-	ch         chan struct{}
-	closeCh    chan struct{}
-	sendCalled chan struct{}
+	ch             chan struct{}
+	closeCh        chan struct{}
+	sendCalled     chan struct{}
+	sendCalledOnce sync.Once
+	closeOnce      sync.Once
 }
 
 func (c *blockClient) Send(message.Message) error {
-	close(c.sendCalled)
+	c.sendCalledOnce.Do(func() {
+		close(c.sendCalled)
+	})
 	<-c.ch
 	return nil
 }
 
 func (c *blockClient) Close() {
-	close(c.ch)
-	close(c.closeCh)
+	c.closeOnce.Do(func() {
+		close(c.closeCh)
+		close(c.ch)
+	})
 }
 
 func TestBlockedDownstreamDoesNotHangShutdown(t *testing.T) {
