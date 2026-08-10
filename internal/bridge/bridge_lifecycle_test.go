@@ -3,6 +3,7 @@ package bridge_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"testing"
 	"time"
@@ -467,6 +468,8 @@ func TestBlockedDownstreamDoesNotHangShutdown(t *testing.T) {
 
 	cancel()
 
+	b.Hub().Shutdown()
+
 	select {
 	case err := <-done:
 		if err != nil {
@@ -475,8 +478,6 @@ func TestBlockedDownstreamDoesNotHangShutdown(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("Run() did not return within 5 seconds — blocked downstream caused hang")
 	}
-
-	b.Hub().Shutdown()
 
 	select {
 	case <-blocked.closeCh:
@@ -488,5 +489,52 @@ func TestBlockedDownstreamDoesNotHangShutdown(t *testing.T) {
 	case <-blocked.sendCalled:
 	default:
 		t.Fatal("Send was never called")
+	}
+}
+
+func TestForwarderCompletesBeforeRunReturns(t *testing.T) {
+	b := bridge.New()
+
+	n := 50
+	msgs := make([]message.Message, n)
+	for i := 0; i < n; i++ {
+		msgs[i] = message.Message{Source: "s", Payload: fmt.Sprintf("%d", i)}
+	}
+
+	client := &chanClient{ch: make(chan message.Message, n)}
+	b.Hub().Register(client)
+
+	b.Registry().Register("s", func() source.Source {
+		return &publishSource{msgs: msgs}
+	})
+
+	ctx := context.Background()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- b.Run(ctx)
+	}()
+
+	received := make(map[string]bool)
+	for i := 0; i < n; i++ {
+		select {
+		case msg := <-client.ch:
+			received[msg.Payload] = true
+		case <-time.After(5 * time.Second):
+			t.Fatalf("timed out after %d messages", i)
+		}
+	}
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run() did not return within 5 seconds")
+	}
+
+	if len(received) != n {
+		t.Fatalf("expected %d messages, got %d", n, len(received))
 	}
 }
