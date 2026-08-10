@@ -2,9 +2,12 @@ package bridge_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -14,7 +17,9 @@ import (
 	"github.com/devicebridge/device-bridge/internal/message"
 	"github.com/devicebridge/device-bridge/internal/server"
 	"github.com/devicebridge/device-bridge/internal/source"
+	"github.com/devicebridge/device-bridge/internal/source/scanner"
 	"github.com/devicebridge/device-bridge/internal/websocket"
+	gorilla "github.com/gorilla/websocket"
 )
 
 type blockSource struct {
@@ -705,4 +710,77 @@ func TestHTTPServerGracefulShutdown(t *testing.T) {
 	}
 
 	cancel()
+}
+
+func TestFullApplicationLifecycle(t *testing.T) {
+	b := bridge.New()
+
+	srv := server.New()
+	wsHandler := websocket.NewHandler(b.Hub())
+	srv.Handle("/ws", wsHandler)
+
+	ts := httptest.NewUnstartedServer(srv.Handler())
+	ts.EnableHTTP2 = false
+	ts.Start()
+	defer ts.Close()
+
+	input := make(chan scanner.Input, 2)
+	b.Registry().Register("scanner", func() source.Source {
+		return scanner.New("scanner-main", input)
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	bridgeDone := make(chan error, 1)
+	go func() {
+		bridgeDone <- b.Run(ctx)
+	}()
+
+	url := "ws" + strings.TrimPrefix(ts.URL, "http") + "/ws"
+
+	conn, _, err := gorilla.DefaultDialer.Dial(url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for b.Hub().Count() == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("client was not registered")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	input <- scanner.Input{Value: "hello-world"}
+	close(input)
+
+	if err := conn.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+
+	_, data, err := conn.ReadMessage()
+	if err != nil {
+		t.Fatalf("did not receive message: %v", err)
+	}
+
+	var received message.Message
+	json.Unmarshal(data, &received)
+
+	if received.Payload != "hello-world" {
+		t.Fatalf("unexpected payload: %q", received.Payload)
+	}
+
+	cancel()
+
+	select {
+	case err := <-bridgeDone:
+		if err != nil {
+			t.Fatalf("unexpected bridge error: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("bridge did not finish")
+	}
+
+	b.Hub().Shutdown()
 }
