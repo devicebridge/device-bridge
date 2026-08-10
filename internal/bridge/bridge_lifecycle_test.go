@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/http"
 	"sync"
 	"testing"
 	"time"
@@ -11,7 +12,9 @@ import (
 	"github.com/devicebridge/device-bridge/internal/bridge"
 	"github.com/devicebridge/device-bridge/internal/hub"
 	"github.com/devicebridge/device-bridge/internal/message"
+	"github.com/devicebridge/device-bridge/internal/server"
 	"github.com/devicebridge/device-bridge/internal/source"
+	"github.com/devicebridge/device-bridge/internal/websocket"
 )
 
 type blockSource struct {
@@ -654,4 +657,52 @@ func (s *concurrentErrSource) Run(ctx context.Context, _ chan<- message.Message)
 	close(s.srcReady)
 	<-ctx.Done()
 	return s.err
+}
+
+func TestHTTPServerGracefulShutdown(t *testing.T) {
+	b := bridge.New()
+
+	srv := server.New()
+	wsHandler := websocket.NewHandler(b.Hub())
+	srv.Handle("/ws", wsHandler)
+
+	httpServer := &http.Server{
+		Addr:    "127.0.0.1:0",
+		Handler: srv.Handler(),
+	}
+
+	go func() {
+		httpServer.ListenAndServe()
+	}()
+
+	b.Registry().Register("s", func() source.Source {
+		return &publishSource{msgs: []message.Message{{Payload: "hello"}}}
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	bridgeDone := make(chan error, 1)
+	go func() {
+		bridgeDone <- b.Run(ctx)
+	}()
+
+	select {
+	case err := <-bridgeDone:
+		if err != nil {
+			t.Fatalf("unexpected bridge error: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("bridge did not finish")
+	}
+
+	b.Hub().Shutdown()
+
+	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer shutdownCancel()
+
+	if err := httpServer.Shutdown(shutdownCtx); err != nil {
+		t.Fatalf("http shutdown error: %v", err)
+	}
+
+	cancel()
 }
