@@ -174,3 +174,82 @@ func TestBroadcastDuringShutdown(t *testing.T) {
 	<-done
 	// no panic, no race
 }
+
+func TestConnectionAfterShutdown(t *testing.T) {
+	h := hub.New()
+
+	handler := NewHandler(h)
+
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	h.Shutdown()
+
+	url := "ws" + strings.TrimPrefix(srv.URL, "http")
+	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if err := conn.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err = conn.ReadMessage()
+	if err == nil {
+		t.Fatal("expected read error after hub shutdown, got nil")
+	}
+
+	conn.Close()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for h.Count() != 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("client was not removed from hub")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestHandlerGoroutineExitsAfterShutdown(t *testing.T) {
+	h := hub.New()
+
+	handler := NewHandler(h)
+
+	srv := httptest.NewServer(handler)
+	defer srv.Close()
+
+	url := "ws" + strings.TrimPrefix(srv.URL, "http")
+	conn, _, err := websocket.DefaultDialer.Dial(url, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer conn.Close()
+
+	deadline := time.Now().Add(5 * time.Second)
+	for h.Count() == 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("client was not registered")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	h.Shutdown()
+
+	if err := conn.SetReadDeadline(time.Now().Add(5 * time.Second)); err != nil {
+		t.Fatal(err)
+	}
+
+	_, _, err = conn.ReadMessage()
+	if err == nil {
+		t.Fatal("expected read error after shutdown")
+	}
+
+	deadline = time.Now().Add(5 * time.Second)
+	for h.Count() != 0 {
+		if time.Now().After(deadline) {
+			t.Fatalf("handler goroutine did not exit, client count: %d", h.Count())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
