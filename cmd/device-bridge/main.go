@@ -58,12 +58,12 @@ func main() {
 	case err := <-bridgeDone:
 		appErr = err
 	case err := <-httpFatal:
-		log.Printf("http server error: %v", err)
+		log.Printf("http server startup error: %v", err)
 		appErr = err
 		stop()
 		bridgeErr := <-bridgeDone
 		if bridgeErr != nil && !errors.Is(bridgeErr, context.Canceled) {
-			log.Printf("bridge error: %v", bridgeErr)
+			log.Printf("runtime error during shutdown: %v", bridgeErr)
 		}
 	}
 
@@ -73,10 +73,11 @@ func main() {
 	defer shutdownCancel()
 
 	if err := httpServer.Shutdown(shutdownCtx); err != nil {
-		log.Printf("http shutdown error: %v", err)
+		log.Printf("http graceful shutdown error: %v", err)
 	}
 
 	if appErr != nil && !errors.Is(appErr, context.Canceled) {
+		log.Printf("application exited with error: %v", appErr)
 		os.Exit(1)
 	}
 }
