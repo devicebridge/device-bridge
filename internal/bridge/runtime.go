@@ -22,6 +22,14 @@ func (b *Bridge) Run(ctx context.Context) error {
 	for _, name := range b.registry.Names() {
 		src, err := b.registry.Create(name)
 		if err != nil {
+			errOnce.Do(func() {
+				firstErr = err
+				cancel()
+			})
+			continue
+		}
+
+		if src == nil {
 			continue
 		}
 

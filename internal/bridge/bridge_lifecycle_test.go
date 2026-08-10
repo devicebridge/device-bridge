@@ -538,3 +538,43 @@ func TestForwarderCompletesBeforeRunReturns(t *testing.T) {
 		t.Fatalf("expected %d messages, got %d", n, len(received))
 	}
 }
+
+func TestNilSourceSkipped(t *testing.T) {
+	b := bridge.New()
+
+	b.Registry().Register("nil", func() source.Source {
+		return nil
+	})
+
+	b.Registry().Register("ok", func() source.Source {
+		return &publishSource{msgs: []message.Message{{Payload: "data"}}}
+	})
+
+	client := &chanClient{ch: make(chan message.Message, 1)}
+	b.Hub().Register(client)
+
+	ctx := context.Background()
+
+	done := make(chan error, 1)
+	go func() {
+		done <- b.Run(ctx)
+	}()
+
+	select {
+	case msg := <-client.ch:
+		if msg.Payload != "data" {
+			t.Fatalf("unexpected payload: %q", msg.Payload)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("did not receive message from ok source")
+	}
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run() did not return")
+	}
+}
