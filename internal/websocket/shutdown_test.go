@@ -160,15 +160,17 @@ func TestBroadcastDuringShutdown(t *testing.T) {
 		time.Sleep(10 * time.Millisecond)
 	}
 
+	started := make(chan struct{})
 	done := make(chan struct{})
 	go func() {
+		close(started)
 		defer close(done)
 		for i := 0; i < 1000; i++ {
 			h.Broadcast(message.Message{Payload: "test"})
 		}
 	}()
 
-	time.Sleep(time.Millisecond)
+	<-started
 	h.Shutdown()
 
 	<-done
