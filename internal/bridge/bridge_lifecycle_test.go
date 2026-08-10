@@ -578,3 +578,80 @@ func TestNilSourceSkipped(t *testing.T) {
 		t.Fatal("Run() did not return")
 	}
 }
+
+func TestMultipleCancellation(t *testing.T) {
+	b := bridge.New()
+
+	blockSrc := &blockSource{unblock: make(chan struct{})}
+	b.Registry().Register("block", func() source.Source {
+		return blockSrc
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan error, 1)
+	go func() {
+		done <- b.Run(ctx)
+	}()
+
+	cancel()
+	cancel()
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("expected nil, got: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run() did not return after cancel")
+	}
+}
+
+func TestConcurrentCancelAndSourceError(t *testing.T) {
+	b := bridge.New()
+
+	srcErr := errors.New("source error")
+
+	srcReady := make(chan struct{})
+
+	b.Registry().Register("err", func() source.Source {
+		go func() {
+			<-srcReady
+		}()
+		return &concurrentErrSource{
+			err:      srcErr,
+			srcReady: srcReady,
+		}
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan error, 1)
+	go func() {
+		done <- b.Run(ctx)
+	}()
+
+	<-srcReady
+	cancel()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected error, got nil")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run() did not return")
+	}
+}
+
+type concurrentErrSource struct {
+	err      error
+	srcReady chan struct{}
+}
+
+func (s *concurrentErrSource) Run(ctx context.Context, _ chan<- message.Message) error {
+	close(s.srcReady)
+	<-ctx.Done()
+	return s.err
+}
