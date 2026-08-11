@@ -37,9 +37,7 @@ func (b *Bridge) Run(ctx context.Context) error {
 		go b.connectSource(runtimeCtx, src, &wg, &firstErr, &errOnce, cancel)
 	}
 
-	hubDone := make(chan struct{})
 	go func() {
-		defer close(hubDone)
 		for msg := range b.bus.Subscribe() {
 			_ = b.hub.Broadcast(msg)
 		}
@@ -48,7 +46,6 @@ func (b *Bridge) Run(ctx context.Context) error {
 	wg.Wait()
 
 	b.bus.Close()
-	<-hubDone
 
 	return firstErr
 }

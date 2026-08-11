@@ -476,8 +476,6 @@ func TestBlockedDownstreamDoesNotHangShutdown(t *testing.T) {
 
 	cancel()
 
-	b.Hub().Shutdown()
-
 	select {
 	case err := <-done:
 		if err != nil {
@@ -486,6 +484,8 @@ func TestBlockedDownstreamDoesNotHangShutdown(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("Run() did not return within 5 seconds — blocked downstream caused hang")
 	}
+
+	b.Hub().Shutdown()
 
 	select {
 	case <-blocked.closeCh:
@@ -497,6 +497,56 @@ func TestBlockedDownstreamDoesNotHangShutdown(t *testing.T) {
 	case <-blocked.sendCalled:
 	default:
 		t.Fatal("Send was never called")
+	}
+}
+
+func TestRunReturnsBeforeHubShutdown(t *testing.T) {
+	b := bridge.New()
+
+	blocked := &blockClient{
+		ch:         make(chan struct{}),
+		closeCh:    make(chan struct{}),
+		sendCalled: make(chan struct{}),
+	}
+	b.Hub().Register(blocked)
+
+	fs := &floodSource{n: 200, started: make(chan struct{})}
+	b.Registry().Register("flood", func() source.Source {
+		return fs
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	done := make(chan error, 1)
+	go func() {
+		done <- b.Run(ctx)
+	}()
+
+	<-fs.started
+
+	select {
+	case <-blocked.sendCalled:
+	case <-time.After(5 * time.Second):
+		t.Fatal("Send was never called")
+	}
+
+	cancel()
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("expected nil, got: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("Run() did not return within 5 seconds — blocked downstream caused hang")
+	}
+
+	b.Hub().Shutdown()
+
+	select {
+	case <-blocked.closeCh:
+	case <-time.After(5 * time.Second):
+		t.Fatal("blocked client was not closed within 5 seconds after Shutdown")
 	}
 }
 

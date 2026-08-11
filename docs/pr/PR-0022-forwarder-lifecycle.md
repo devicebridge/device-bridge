@@ -2,7 +2,7 @@
 
 ## Статус
 
-Merged
+Merged (Revisited: PR Corrective — `<-hubDone` removed)
 
 ---
 
@@ -18,11 +18,29 @@ Merged
 
 ---
 
-## Решение
+## Решение (оригинальное, PR-0022)
 
 - `Bridge.Run()` ожидает `hubDone` после `Bus.Close()`.
 - Forwarder завершается естественно: `range` на закрытом канале Bus выходит.
 - В случае блокированного клиента `Hub.Shutdown()` (через `Client.Close()`) разблокирует forwarder.
+
+---
+
+## Статус (Revisited)
+
+Модель PR-0022 создавала потенциальный deadlock: при заблокированном downstream-клиенте `Hub.Shutdown()` должен быть вызван ДО возврата `Bridge.Run()`, но внешний lifecycle вызывает `Hub.Shutdown()` ПОСЛЕ.
+
+**Corrective PR** (после `3c8d2e3`) убирает `<-hubDone`. Новый контракт:
+
+```text
+Bus.Close()
+    ↓
+Bridge.Run() returns
+    ↓
+Hub.Shutdown() (внешний lifecycle)
+    ↓
+hub forwarder terminates
+```
 
 ---
 
@@ -31,10 +49,11 @@ Merged
 | Тест | Проверка |
 |---|---|
 | `TestForwarderCompletesBeforeRunReturns` | Все сообщения доставлены до возврата Run |
-| `TestBlockedDownstreamDoesNotHangShutdown` (обновлён) | Hub.Shutdown вызывает Close до ожидания Run |
+| `TestBlockedDownstreamDoesNotHangShutdown` | Run возвращается ДО Hub.Shutdown при блокированном downstream |
+| `TestRunReturnsBeforeHubShutdown` | Новый regression test: подтверждает новый контракт |
 
 ---
 
 ## Результат
 
-`Bridge.Run()` возвращается только после завершения всех внутренних горутин.
+`Bridge.Run()` возвращается после закрытия Bus, не дожидаясь завершения hub forwarder. Downstream shutdown — ответственность внешнего lifecycle через `Hub.Shutdown()`.
