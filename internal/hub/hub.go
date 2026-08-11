@@ -10,12 +10,11 @@ import (
 
 // Hub broadcasts messages to registered clients.
 type Hub struct {
-	mu       sync.RWMutex
-	clients  map[Client]struct{}
-	closed   chan struct{}
-	once     sync.Once
-	notify   chan struct{}
-	notifyMu sync.Mutex
+	mu      sync.RWMutex
+	clients map[Client]struct{}
+	closed  chan struct{}
+	once    sync.Once
+	notify  chan struct{}
 }
 
 // New creates a new Hub.
@@ -39,7 +38,9 @@ func (h *Hub) Register(client Client) {
 	}
 
 	h.clients[client] = struct{}{}
-	h.signalChange()
+
+	close(h.notify)
+	h.notify = make(chan struct{})
 }
 
 // Unregister removes a client.
@@ -48,7 +49,9 @@ func (h *Hub) Unregister(client Client) {
 	defer h.mu.Unlock()
 
 	delete(h.clients, client)
-	h.signalChange()
+
+	close(h.notify)
+	h.notify = make(chan struct{})
 }
 
 // Count returns the number of registered clients.
@@ -66,15 +69,12 @@ func (h *Hub) WaitForCount(ctx context.Context, target int) error {
 	for {
 		h.mu.RLock()
 		n := len(h.clients)
+		ch := h.notify
 		h.mu.RUnlock()
 
 		if n >= target {
 			return nil
 		}
-
-		h.notifyMu.Lock()
-		ch := h.notify
-		h.notifyMu.Unlock()
 
 		select {
 		case <-h.closed:
@@ -84,13 +84,6 @@ func (h *Hub) WaitForCount(ctx context.Context, target int) error {
 		case <-ch:
 		}
 	}
-}
-
-func (h *Hub) signalChange() {
-	h.notifyMu.Lock()
-	close(h.notify)
-	h.notify = make(chan struct{})
-	h.notifyMu.Unlock()
 }
 
 // Broadcast sends a message to all registered clients.

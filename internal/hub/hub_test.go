@@ -1,8 +1,10 @@
 package hub
 
 import (
+	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/devicebridge/device-bridge/internal/message"
 )
@@ -210,5 +212,88 @@ func TestBroadcastAfterShutdown(t *testing.T) {
 
 	if err := h.Broadcast(msg); err != nil {
 		t.Fatalf("broadcast should return nil after shutdown, got: %v", err)
+	}
+}
+
+func TestWaitForCount(t *testing.T) {
+	h := New()
+
+	done := make(chan error, 1)
+	go func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		done <- h.WaitForCount(ctx, 1)
+	}()
+
+	c := &mockClient{}
+	h.Register(c)
+
+	select {
+	case err := <-done:
+		if err != nil {
+			t.Fatalf("unexpected error: %v", err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("WaitForCount did not return after Register")
+	}
+}
+
+func TestWaitForCountAlreadySatisfied(t *testing.T) {
+	h := New()
+
+	c := &mockClient{}
+	h.Register(c)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	if err := h.WaitForCount(ctx, 1); err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+}
+
+func TestWaitForCountShutdown(t *testing.T) {
+	h := New()
+
+	done := make(chan error, 1)
+	go func() {
+		ctx := context.Background()
+		done <- h.WaitForCount(ctx, 1)
+	}()
+
+	h.Shutdown()
+
+	select {
+	case err := <-done:
+		if err == nil {
+			t.Fatal("expected error after shutdown, got nil")
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("WaitForCount did not return after Shutdown")
+	}
+}
+
+func TestWaitForCountStress(t *testing.T) {
+	for i := 0; i < 1000; i++ {
+		h := New()
+
+		done := make(chan error, 1)
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			done <- h.WaitForCount(ctx, 1)
+		}()
+
+		c := &mockClient{}
+		h.Register(c)
+
+		select {
+		case err := <-done:
+			if err != nil {
+				t.Fatalf("iteration %d: unexpected error: %v", i, err)
+			}
+		case <-time.After(time.Second):
+			t.Fatalf("iteration %d: WaitForCount did not return", i)
+		}
 	}
 }
