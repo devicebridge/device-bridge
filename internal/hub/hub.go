@@ -1,6 +1,8 @@
 package hub
 
 import (
+	"context"
+	"fmt"
 	"sync"
 
 	"github.com/devicebridge/device-bridge/internal/message"
@@ -8,10 +10,12 @@ import (
 
 // Hub broadcasts messages to registered clients.
 type Hub struct {
-	mu      sync.RWMutex
-	clients map[Client]struct{}
-	closed  chan struct{}
-	once    sync.Once
+	mu       sync.RWMutex
+	clients  map[Client]struct{}
+	closed   chan struct{}
+	once     sync.Once
+	notify   chan struct{}
+	notifyMu sync.Mutex
 }
 
 // New creates a new Hub.
@@ -19,6 +23,7 @@ func New() *Hub {
 	return &Hub{
 		clients: make(map[Client]struct{}),
 		closed:  make(chan struct{}),
+		notify:  make(chan struct{}),
 	}
 }
 
@@ -34,6 +39,7 @@ func (h *Hub) Register(client Client) {
 	}
 
 	h.clients[client] = struct{}{}
+	h.signalChange()
 }
 
 // Unregister removes a client.
@@ -42,6 +48,7 @@ func (h *Hub) Unregister(client Client) {
 	defer h.mu.Unlock()
 
 	delete(h.clients, client)
+	h.signalChange()
 }
 
 // Count returns the number of registered clients.
@@ -50,6 +57,40 @@ func (h *Hub) Count() int {
 	defer h.mu.RUnlock()
 
 	return len(h.clients)
+}
+
+// WaitForCount waits until the number of registered clients reaches
+// at least count. Returns nil when the condition is met, ctx.Err()
+// on context cancellation, or an error if the hub is shut down.
+func (h *Hub) WaitForCount(ctx context.Context, target int) error {
+	for {
+		h.mu.RLock()
+		n := len(h.clients)
+		h.mu.RUnlock()
+
+		if n >= target {
+			return nil
+		}
+
+		h.notifyMu.Lock()
+		ch := h.notify
+		h.notifyMu.Unlock()
+
+		select {
+		case <-h.closed:
+			return fmt.Errorf("hub is shut down")
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-ch:
+		}
+	}
+}
+
+func (h *Hub) signalChange() {
+	h.notifyMu.Lock()
+	close(h.notify)
+	h.notify = make(chan struct{})
+	h.notifyMu.Unlock()
 }
 
 // Broadcast sends a message to all registered clients.

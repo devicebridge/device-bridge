@@ -744,12 +744,11 @@ func TestFullApplicationLifecycle(t *testing.T) {
 	}
 	defer conn.Close()
 
-	deadline := time.Now().Add(5 * time.Second)
-	for b.Hub().Count() == 0 {
-		if time.Now().After(deadline) {
-			t.Fatal("client was not registered")
-		}
-		time.Sleep(10 * time.Millisecond)
+	waitCtx, waitCancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer waitCancel()
+
+	if err := b.Hub().WaitForCount(waitCtx, 1); err != nil {
+		t.Fatalf("client was not registered: %v", err)
 	}
 
 	input <- scanner.Input{Value: "hello-world"}
