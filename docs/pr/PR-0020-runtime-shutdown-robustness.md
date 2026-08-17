@@ -48,8 +48,8 @@ WaitGroup complete
         ↓
 Bus.Close()
         ↓
-Bridge.Run() returns (hub forwarder continues asynchronously)
-        ↓
+Bus shutdown signal stops the hub forwarder when it is not inside Broadcast
+       ↓
 Hub.Shutdown() → closes clients → unblocks hub forwarder
         ↓
 HTTP Server.Shutdown()
@@ -66,7 +66,9 @@ application exits
 
 ### Bridge Runtime
 - Forwarder Source → Bus использует `PublishCtx` вместо `Publish`. При отмене контекста forwarder немедленно завершается.
-- `Bridge.Run()` больше не ждёт завершения hub forwarder goroutine — после `Bus.Close()` и возврата Run, goroutine завершится асинхронно при `Hub.Shutdown()`.
+- Hub forwarder слушает `Bus.Done()` и завершается после shutdown Bus, если не находится внутри блокирующего `Hub.Broadcast()`.
+- `Bridge.Run()` не ждёт hub forwarder: это сохраняет bounded shutdown runtime при заблокированном downstream.
+- `Hub.Shutdown()` по-прежнему необходим для разблокировки уже выполняющегося `Client.Send()`.
 
 ### main.go
 - HTTP-ошибка запуска (`ListenAndServe`) больше не теряется. При ошибке вызывается `stop()` (отмена signal context), Bridge завершается, приложение выходит с ошибкой.
@@ -87,14 +89,14 @@ application exits
 ## Что намеренно НЕ входит
 
 - Не добавляются новые внешние зависимости.
-- Hub forwarder не имеет контекстной отмены для Broadcast.
+- Hub forwarder не может прервать произвольный уже выполняющийся `Client.Send()` без участия реализации Client.
 - Архитектура Source → Bus → Hub не изменена.
 
 ---
 
 ## Результат
 
-Runtime имеет bounded shutdown path: cancellation немедленно прерывает блокирующую публикацию, forwarder завершается, Sources останавливаются, Bus закрывается, `Bridge.Run()` возвращается. Заблокированный downstream не препятствует завершению Runtime.
+Runtime имеет bounded shutdown path: cancellation немедленно прерывает блокирующую публикацию, Sources останавливаются, Bus сигнализирует shutdown, hub forwarder прекращает ожидание новых сообщений, а `Bridge.Run()` возвращается. Заблокированный downstream не препятствует завершению Runtime, но активный `Client.Send()` должен быть разблокирован последующим `Hub.Shutdown()`.
 
 ---
 

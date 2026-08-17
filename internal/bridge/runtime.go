@@ -46,8 +46,21 @@ func (b *Bridge) Run(ctx context.Context) error {
 	}
 
 	go func() {
-		for msg := range b.bus.Subscribe() {
-			_ = b.hub.Broadcast(msg)
+		messages := b.bus.Subscribe()
+		for {
+			select {
+			case msg := <-messages:
+				_ = b.hub.Broadcast(msg)
+			case <-b.bus.Done():
+				for {
+					select {
+					case msg := <-messages:
+						_ = b.hub.Broadcast(msg)
+					default:
+						return
+					}
+				}
+			}
 		}
 	}()
 
