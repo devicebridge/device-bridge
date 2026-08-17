@@ -2,13 +2,19 @@ package bus
 
 import (
 	"context"
+	"errors"
+	"sync"
 
 	"github.com/devicebridge/device-bridge/internal/message"
 )
 
+var ErrClosed = errors.New("bus is closed")
+
 // Bus transports messages between producers and consumers.
 type Bus struct {
-	ch chan message.Message
+	ch   chan message.Message
+	done chan struct{}
+	once sync.Once
 }
 
 // New creates a new message bus.
@@ -18,13 +24,17 @@ func New(size int) *Bus {
 	}
 
 	return &Bus{
-		ch: make(chan message.Message, size),
+		ch:   make(chan message.Message, size),
+		done: make(chan struct{}),
 	}
 }
 
 // Publish sends a message to the bus.
 func (b *Bus) Publish(msg message.Message) {
-	b.ch <- msg
+	select {
+	case b.ch <- msg:
+	case <-b.done:
+	}
 }
 
 // PublishCtx sends a message to the bus or returns an error if
@@ -35,6 +45,8 @@ func (b *Bus) PublishCtx(ctx context.Context, msg message.Message) error {
 		return nil
 	case <-ctx.Done():
 		return ctx.Err()
+	case <-b.done:
+		return ErrClosed
 	}
 }
 
@@ -45,5 +57,12 @@ func (b *Bus) Subscribe() <-chan message.Message {
 
 // Close closes the bus, preventing further publishes.
 func (b *Bus) Close() {
-	close(b.ch)
+	b.once.Do(func() {
+		close(b.done)
+	})
+}
+
+// Done returns a channel that is closed when the bus is shut down.
+func (b *Bus) Done() <-chan struct{} {
+	return b.done
 }
