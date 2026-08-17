@@ -2,6 +2,7 @@ package source
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/devicebridge/device-bridge/internal/message"
@@ -84,4 +85,24 @@ func TestRegisterNilFactory(t *testing.T) {
 	if err := r.Register("mock", nil); err == nil {
 		t.Fatal("expected error")
 	}
+}
+
+func TestConcurrentRegistryAccess(t *testing.T) {
+	r := NewRegistry()
+	var wg sync.WaitGroup
+
+	for i := 0; i < 100; i++ {
+		wg.Add(2)
+		go func(i int) {
+			defer wg.Done()
+			_ = r.Register(string(rune('a'+i)), registryMockFactory)
+		}(i)
+		go func() {
+			defer wg.Done()
+			_ = r.Names()
+			_, _ = r.Create("missing")
+		}()
+	}
+
+	wg.Wait()
 }

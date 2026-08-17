@@ -1,12 +1,16 @@
 package source
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+)
 
 // Factory creates a new Source instance.
 type Factory func() Source
 
 // Registry stores registered source factories.
 type Registry struct {
+	mu        sync.RWMutex
 	factories map[string]Factory
 }
 
@@ -27,6 +31,9 @@ func (r *Registry) Register(name string, factory Factory) error {
 		return fmt.Errorf("factory cannot be nil")
 	}
 
+	r.mu.Lock()
+	defer r.mu.Unlock()
+
 	if _, exists := r.factories[name]; exists {
 		return fmt.Errorf("source %q already registered", name)
 	}
@@ -37,7 +44,9 @@ func (r *Registry) Register(name string, factory Factory) error {
 
 // Create creates a source by its registered name.
 func (r *Registry) Create(name string) (Source, error) {
+	r.mu.RLock()
 	factory, exists := r.factories[name]
+	r.mu.RUnlock()
 	if !exists {
 		return nil, fmt.Errorf("unknown source %q", name)
 	}
@@ -47,6 +56,9 @@ func (r *Registry) Create(name string) (Source, error) {
 
 // Names returns all registered source names.
 func (r *Registry) Names() []string {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+
 	names := make([]string, 0, len(r.factories))
 
 	for name := range r.factories {
