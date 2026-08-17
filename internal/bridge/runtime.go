@@ -10,6 +10,14 @@ import (
 
 // Run starts the bridge runtime.
 func (b *Bridge) Run(ctx context.Context) error {
+	started := false
+	b.runOnce.Do(func() {
+		started = true
+	})
+	if !started {
+		return ErrAlreadyRunning
+	}
+
 	runtimeCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 

@@ -375,6 +375,49 @@ func TestContextCancellationIsNotError(t *testing.T) {
 	}
 }
 
+func TestBridgeRunCanOnlyBeStartedOnce(t *testing.T) {
+	b := bridge.New()
+
+	if err := b.Run(context.Background()); err != nil {
+		t.Fatalf("first Run() failed: %v", err)
+	}
+
+	if err := b.Run(context.Background()); !errors.Is(err, bridge.ErrAlreadyRunning) {
+		t.Fatalf("expected ErrAlreadyRunning, got: %v", err)
+	}
+}
+
+func TestConcurrentBridgeRunHasSingleOwner(t *testing.T) {
+	b := bridge.New()
+	src := &blockSource{unblock: make(chan struct{})}
+	if err := b.Registry().Register("block", func() source.Source { return src }); err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	results := make(chan error, 2)
+	go func() { results <- b.Run(ctx) }()
+	go func() { results <- b.Run(ctx) }()
+
+	first := <-results
+	cancel()
+	second := <-results
+
+	ownerErr, rejectedErr := first, second
+	if errors.Is(ownerErr, bridge.ErrAlreadyRunning) {
+		ownerErr, rejectedErr = second, first
+	}
+
+	if rejectedErr == nil {
+		t.Fatal("expected one Run() call to be rejected")
+	}
+
+	cancel()
+	if ownerErr != nil {
+		t.Fatalf("owned Run() returned an error: %v", ownerErr)
+	}
+}
+
 func TestSourceCancellationDeterministic(t *testing.T) {
 	b := bridge.New()
 

@@ -39,6 +39,8 @@ type Source interface {
 func (b *Bridge) Run(ctx context.Context) error
 ```
 
+`Bridge` является одноразовым runtime-объектом: первый вызов `Run` атомарно занимает lifecycle, а повторный или конкурентный вызов возвращает `ErrAlreadyRunning`.
+
 ---
 
 ## Порядок shutdown
@@ -93,6 +95,7 @@ Bridge.Run() → source error
 - Штатная отмена контекста возвращает `nil`.
 - `context.Canceled` не считается ошибкой Runtime.
 - Сохраняется первая полученная ошибка Source.
+- Один экземпляр `Bridge` нельзя запускать повторно или одновременно из нескольких goroutine.
 
 ---
 

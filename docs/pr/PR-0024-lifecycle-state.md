@@ -21,9 +21,11 @@ Merged
 | Уже отменённый context | `TestApplicationNormalShutdown` |
 | Штатное завершение | `TestNormalShutdown`, `TestContextCancellationIsNotError` |
 | Ошибка Source | `TestSourceError`, `TestApplicationErrorPropagation` |
+| Повторный запуск Bridge | `TestBridgeRunCanOnlyBeStartedOnce` |
+| Конкурентный запуск Bridge | `TestConcurrentBridgeRunHasSingleOwner` |
 
 ---
 
 ## Результат
 
-Runtime lifecycle устойчив к конкурентным и повторным операциям. State machine не потребовался.
+Runtime lifecycle устойчив к конкурентным операциям отмены и явно запрещает повторный или конкурентный запуск одного экземпляра `Bridge`. State machine не потребовался.
