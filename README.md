@@ -116,6 +116,8 @@ make build
 
 WebSocket endpoint: `ws://localhost:8080/ws`
 
+Для установки на Debian 12 как systemd-службы см. [`docs/deployment/debian12.md`](docs/deployment/debian12.md).
+
 Health endpoints:
 
 - `GET /healthz` — process health;
