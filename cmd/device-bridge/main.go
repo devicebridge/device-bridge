@@ -3,7 +3,9 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -24,60 +26,69 @@ func main() {
 		log.Fatalf("config error: %v", err)
 	}
 
-	b := bridge.New()
-
-	srv := server.New()
-
-	wsHandler := websocket.NewHandler(b.Hub())
-	srv.Handle("/ws", wsHandler)
-
-	httpServer := &http.Server{
-		Addr:    cfg.ListenAddr(),
-		Handler: srv.Handler(),
-	}
-
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
+	if err := runApplication(ctx, cfg); err != nil && !errors.Is(err, context.Canceled) {
+		log.Printf("application exited with error: %v", err)
+		os.Exit(1)
+	}
+}
+
+func runApplication(ctx context.Context, cfg *config.Config) error {
+	listener, err := net.Listen("tcp", cfg.ListenAddr())
+	if err != nil {
+		return fmt.Errorf("listen %s: %w", cfg.ListenAddr(), err)
+	}
+
+	b := bridge.New()
+	srv := server.New()
+	srv.Handle("/ws", websocket.NewHandler(b.Hub()))
+	httpServer := &http.Server{Handler: srv.Handler()}
+
+	runtimeCtx, cancel := context.WithCancel(ctx)
+	defer cancel()
+
 	bridgeDone := make(chan error, 1)
-	go func() {
-		bridgeDone <- b.Run(ctx)
-	}()
+	go func() { bridgeDone <- b.Run(runtimeCtx) }()
 
-	httpFatal := make(chan error, 1)
-	go func() {
-		err := httpServer.ListenAndServe()
-		if err != nil && err != http.ErrServerClosed {
-			httpFatal <- err
-		}
-	}()
+	serveDone := make(chan error, 1)
+	go func() { serveDone <- httpServer.Serve(listener) }()
 
-	var appErr error
-
+	var (
+		appErr         error
+		bridgeErr      error
+		bridgeDoneSeen bool
+	)
 	select {
+	case <-ctx.Done():
+		cancel()
+		appErr = ctx.Err()
 	case err := <-bridgeDone:
+		bridgeErr = err
+		bridgeDoneSeen = true
 		appErr = err
-	case err := <-httpFatal:
-		log.Printf("http server startup error: %v", err)
-		appErr = err
-		stop()
-		bridgeErr := <-bridgeDone
-		if bridgeErr != nil && !errors.Is(bridgeErr, context.Canceled) {
-			log.Printf("runtime error during shutdown: %v", bridgeErr)
+		cancel()
+	case err := <-serveDone:
+		if !errors.Is(err, http.ErrServerClosed) {
+			appErr = err
+			cancel()
 		}
+	}
+
+	if !bridgeDoneSeen {
+		bridgeErr = <-bridgeDone
+	}
+	if appErr == nil && bridgeErr != nil && !errors.Is(bridgeErr, context.Canceled) {
+		appErr = bridgeErr
 	}
 
 	b.Hub().Shutdown()
-
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer shutdownCancel()
-
-	if err := httpServer.Shutdown(shutdownCtx); err != nil {
-		log.Printf("http graceful shutdown error: %v", err)
+	if err := httpServer.Shutdown(shutdownCtx); err != nil && appErr == nil {
+		appErr = fmt.Errorf("http graceful shutdown: %w", err)
 	}
 
-	if appErr != nil && !errors.Is(appErr, context.Canceled) {
-		log.Printf("application exited with error: %v", appErr)
-		os.Exit(1)
-	}
+	return appErr
 }

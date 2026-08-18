@@ -17,6 +17,8 @@ Merged
 | Тест | Проверка |
 |---|---|
 | `TestFullApplicationLifecycle` | Scanner → Bus → Hub → WebSocket → Client → cancel → shutdown |
+| `TestRunApplicationRejectsOccupiedPort` | Ошибка bind HTTP-порта возвращается до запуска runtime |
+| `TestRunApplicationStopsOnContextCancellation` | Отмена application context завершает Bridge и HTTP server |
 
 ---
 
@@ -49,3 +51,5 @@ httptest cleanup
 ## Результат
 
 Полный интеграционный тест подтверждает: данные от Source проходят через весь pipeline и доставляются WebSocket-клиенту. Завершение — без зависаний и утечек.
+
+Application orchestration вынесен в `runApplication`, поэтому ошибки bind, cancellation и shutdown можно проверять без запуска отдельного процесса.
