@@ -95,6 +95,7 @@ Bridge.Run() возвращает ошибку
 | `DEVICE_BRIDGE_HTTP_PORT` | HTTP listen port | `8080` |
 | `DEVICE_BRIDGE_SOURCES` | Comma-separated source names | empty |
 | `DEVICE_BRIDGE_SCANNER_PATH` | Serial-compatible scanner path | empty |
+| `DEVICE_BRIDGE_HID_PATH` | Linux input event scanner path | empty |
 | `DEVICE_BRIDGE_SCANNER_BAUD` | Configured serial baud rate | `9600` |
 | `DEVICE_BRIDGE_SCANNER_RECONNECT_SECONDS` | Reconnect delay after port failure | `1` |
 
@@ -102,7 +103,7 @@ Supported source names are `scanner-main` and `scanner-secondary`. Each configur
 
 Serial integration uses a line-oriented `io.ReadCloser` boundary. The adapter supports `LF`, `CRLF`, final values before `EOF`, and cancellation of blocking reads. Device opening and serial port configuration are platform-specific and are not part of the cross-platform core.
 
-When `DEVICE_BRIDGE_SCANNER_PATH` is set, `scanner-main` reads from that path. In the development VM it can point to a PTY endpoint created with `socat`. The cross-platform core validates baud and reconnect settings; OS-specific port configuration remains in the device opener.
+When `DEVICE_BRIDGE_SCANNER_PATH` is set, `scanner-main` reads from that path. In the development VM it can point to a PTY endpoint created with `socat`. Alternatively, on Linux, `DEVICE_BRIDGE_HID_PATH` can point to `/dev/input/eventN` for a keyboard-like scanner. Serial and HID paths are mutually exclusive. The cross-platform core validates baud and reconnect settings; OS-specific port configuration remains in the device opener.
 
 ## Быстрый старт
 

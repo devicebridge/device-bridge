@@ -69,6 +69,17 @@ func TestLoadScannerPathFromEnv(t *testing.T) {
 	}
 }
 
+func TestLoadHIDPathFromEnv(t *testing.T) {
+	t.Setenv("DEVICE_BRIDGE_HID_PATH", "/dev/input/event2")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.HIDPath != "/dev/input/event2" {
+		t.Fatalf("expected HID path, got %q", cfg.HIDPath)
+	}
+}
+
 func TestLoadSerialSettings(t *testing.T) {
 	t.Setenv("DEVICE_BRIDGE_SCANNER_BAUD", "115200")
 	t.Setenv("DEVICE_BRIDGE_SCANNER_RECONNECT_SECONDS", "3")

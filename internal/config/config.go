@@ -17,6 +17,7 @@ type Config struct {
 	HTTPPort              int
 	Sources               []string
 	ScannerPath           string
+	HIDPath               string
 	ScannerBaud           int
 	ScannerReconnectDelay int
 }
@@ -54,6 +55,7 @@ func Load() (*Config, error) {
 		}
 	}
 	cfg.ScannerPath = os.Getenv("DEVICE_BRIDGE_SCANNER_PATH")
+	cfg.HIDPath = os.Getenv("DEVICE_BRIDGE_HID_PATH")
 	cfg.ScannerBaud = 9600
 	cfg.ScannerReconnectDelay = 1
 	if value := os.Getenv("DEVICE_BRIDGE_SCANNER_BAUD"); value != "" {

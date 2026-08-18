@@ -27,6 +27,7 @@ type application struct {
 	bridge   *bridge.Bridge
 	adapters []*scanner.ChannelAdapter
 	serials  []*scanner.ReconnectingAdapter
+	hids     []hidRuntime
 	listener net.Listener
 	server   *http.Server
 	router   *server.Server
@@ -64,6 +65,10 @@ func runApplication(ctx context.Context, cfg *config.Config) error {
 			serialDone <- serial.Run(runtimeCtx)
 		}(serial)
 	}
+	hidDone := make(chan error, len(app.hids))
+	for _, hid := range app.hids {
+		go func(hid hidRuntime) { hidDone <- hid.Run(runtimeCtx) }(hid)
+	}
 	go func() { bridgeDone <- app.bridge.Run(runtimeCtx) }()
 
 	serveDone := make(chan error, 1)
@@ -97,6 +102,9 @@ func runApplication(ctx context.Context, cfg *config.Config) error {
 	for range app.serials {
 		<-serialDone
 	}
+	for range app.hids {
+		<-hidDone
+	}
 	if appErr == nil && bridgeErr != nil && !errors.Is(bridgeErr, context.Canceled) {
 		appErr = bridgeErr
 	}
@@ -113,6 +121,9 @@ func runApplication(ctx context.Context, cfg *config.Config) error {
 }
 
 func newApplication(cfg *config.Config) (*application, error) {
+	if cfg.ScannerPath != "" && cfg.HIDPath != "" {
+		return nil, fmt.Errorf("scanner path and HID path are mutually exclusive")
+	}
 	listener, err := net.Listen("tcp", cfg.ListenAddr())
 	if err != nil {
 		return nil, fmt.Errorf("listen %s: %w", cfg.ListenAddr(), err)
@@ -120,7 +131,7 @@ func newApplication(cfg *config.Config) (*application, error) {
 
 	b := bridge.New()
 	sourceCfg := *cfg
-	if cfg.ScannerPath != "" {
+	if cfg.ScannerPath != "" || cfg.HIDPath != "" {
 		sourceCfg.Sources = make([]string, 0, len(cfg.Sources))
 		for _, name := range cfg.Sources {
 			if name != "scanner-main" {
@@ -151,7 +162,12 @@ func newApplication(cfg *config.Config) (*application, error) {
 			return nil, err
 		}
 	}
-	return &application{bridge: b, adapters: adapters, serials: serials, listener: listener, server: httpServer, router: srv}, nil
+	hids, err := configureHID(b, cfg)
+	if err != nil {
+		listener.Close()
+		return nil, err
+	}
+	return &application{bridge: b, adapters: adapters, serials: serials, hids: hids, listener: listener, server: httpServer, router: srv}, nil
 }
 
 func (a *application) closeAdapters() {
@@ -160,6 +176,9 @@ func (a *application) closeAdapters() {
 	}
 	for _, serial := range a.serials {
 		serial.Close()
+	}
+	for _, hid := range a.hids {
+		hid.Close()
 	}
 }
 

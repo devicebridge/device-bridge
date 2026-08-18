@@ -2,6 +2,8 @@
 
 The Linux-only `source/hid` adapter reads keyboard-like events from a Linux input device and converts digit key releases terminated by Enter into `scanner.Input` values.
 
+Application configuration uses `DEVICE_BRIDGE_HID_PATH`, for example `/dev/input/event2`. It is mutually exclusive with `DEVICE_BRIDGE_SCANNER_PATH`.
+
 ## Scope
 
 - Reads Linux `input_event` records from an `io.ReadCloser`.

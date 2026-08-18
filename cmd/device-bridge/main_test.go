@@ -64,6 +64,18 @@ func TestNewApplicationWithSerialPath(t *testing.T) {
 	app.listener.Close()
 }
 
+func TestNewApplicationRejectsSerialAndHIDTogether(t *testing.T) {
+	_, err := newApplication(&config.Config{
+		HTTPHost:    "127.0.0.1",
+		HTTPPort:    0,
+		ScannerPath: "/tmp/serial",
+		HIDPath:     "/dev/input/event2",
+	})
+	if err == nil {
+		t.Fatal("expected mutually exclusive device path error")
+	}
+}
+
 func TestRunApplicationRejectsOccupiedPort(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
