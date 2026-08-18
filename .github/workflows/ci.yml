@@ -29,5 +29,17 @@ jobs:
       - run: go vet ./...
       - run: go test ./...
       - run: go build ./...
+
+  race:
+    runs-on: ubuntu-latest
+    env:
+      CGO_ENABLED: 1
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
       - run: go test -race ./...
-        if: matrix.os == 'ubuntu-latest'
