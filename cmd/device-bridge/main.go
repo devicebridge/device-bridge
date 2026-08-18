@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"log"
 	"net"
 	"net/http"
@@ -25,7 +26,7 @@ const shutdownTimeout = 5 * time.Second
 type application struct {
 	bridge   *bridge.Bridge
 	adapters []*scanner.ChannelAdapter
-	serials  []*scanner.SerialAdapter
+	serials  []*scanner.ReconnectingAdapter
 	listener net.Listener
 	server   *http.Server
 	router   *server.Server
@@ -59,7 +60,7 @@ func runApplication(ctx context.Context, cfg *config.Config) error {
 	bridgeDone := make(chan error, 1)
 	serialDone := make(chan error, len(app.serials))
 	for _, serial := range app.serials {
-		go func(serial *scanner.SerialAdapter) {
+		go func(serial *scanner.ReconnectingAdapter) {
 			serialDone <- serial.Run(runtimeCtx)
 		}(serial)
 	}
@@ -135,14 +136,12 @@ func newApplication(cfg *config.Config) (*application, error) {
 	srv := server.New()
 	srv.Handle("/ws", websocket.NewHandler(b.Hub()))
 	httpServer := &http.Server{Handler: srv.Handler()}
-	serials := make([]*scanner.SerialAdapter, 0)
+	serials := make([]*scanner.ReconnectingAdapter, 0)
 	if cfg.ScannerPath != "" {
-		port, err := os.Open(cfg.ScannerPath)
-		if err != nil {
-			listener.Close()
-			return nil, fmt.Errorf("open scanner path %s: %w", cfg.ScannerPath, err)
-		}
-		serial := scanner.NewSerialAdapter(port, 100)
+		path := cfg.ScannerPath
+		serial := scanner.NewReconnectingAdapter(func() (io.ReadCloser, error) {
+			return os.Open(path)
+		}, time.Duration(cfg.ScannerReconnectDelay)*time.Second, 100)
 		serials = append(serials, serial)
 		if err := b.Registry().Register("scanner-main", func() source.Source {
 			return scanner.New("scanner-main", serial.Input())

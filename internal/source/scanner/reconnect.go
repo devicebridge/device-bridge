@@ -56,8 +56,8 @@ func (a *ReconnectingAdapter) Run(ctx context.Context) error {
 		}
 	serialFinished:
 		serial.Close()
-		if err == nil || ctx.Err() != nil {
-			return err
+		if ctx.Err() != nil {
+			return ctx.Err()
 		}
 		if err := waitReconnect(ctx, a.delay); err != nil {
 			return err
