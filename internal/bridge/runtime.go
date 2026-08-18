@@ -82,9 +82,7 @@ func (b *Bridge) connectSource(ctx context.Context, src source.Source, wg *sync.
 		sourceDone <- src.Run(ctx, out)
 	}()
 
-	wg.Add(1)
 	go func() {
-		defer wg.Done()
 		for msg := range out {
 			if err := b.bus.PublishCtx(ctx, msg); err != nil {
 				return

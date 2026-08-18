@@ -90,8 +90,9 @@ Bridge.Run() → source error
 - Ошибка Source больше не игнорируется.
 - Ошибка одного Source инициирует остановку Runtime.
 - Остальные Sources получают `ctx.Done()`.
-- Bridge ждёт завершения всех Sources через `sync.WaitGroup`.
+- Bridge ждёт завершения coordinator goroutine всех Sources через `sync.WaitGroup`; `Add` выполняется до запуска goroutine.
 - Bus закрывается после завершения всех Sources.
+- Source → Bus forwarder использует runtime context и прекращает публикацию после shutdown Bus; его завершение не блокирует возврат `Run`, поскольку downstream `Client.Send` может быть произвольно блокирующим.
 - Штатная отмена контекста возвращает `nil`.
 - `context.Canceled` не считается ошибкой Runtime.
 - Сохраняется первая полученная ошибка Source.

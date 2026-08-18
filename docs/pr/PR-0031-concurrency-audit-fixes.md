@@ -13,6 +13,7 @@ In progress
 - Bus → Hub dispatcher завершает ожидание новых сообщений по `Bus.Done()` и дренирует накопленный буфер.
 - `Registry` защищает factories через `sync.RWMutex`.
 - `Hub.Shutdown()` очищает реестр клиентов до вызова `Client.Close()`.
+- `Bridge` больше не вызывает `WaitGroup.Add` из запущенного coordinator; счетчик устанавливается до `go`, что устраняет race `Add`/`Wait`.
 
 ## Проверки
 
