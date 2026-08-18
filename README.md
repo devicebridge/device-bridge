@@ -106,6 +106,11 @@ make build
 
 WebSocket endpoint: `ws://localhost:8080/ws`
 
+Health endpoints:
+
+- `GET /healthz` — process health;
+- `GET /readyz` — HTTP runtime readiness.
+
 ## Статус
 
 Проект находится в активной разработке.

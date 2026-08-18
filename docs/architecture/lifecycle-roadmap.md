@@ -17,6 +17,8 @@
 - Application configuration now accepts `DEVICE_BRIDGE_SOURCES`.
 - The application bootstrap registers the supported scanner source names.
 - The channel input adapter is available for tests and future transport adapters.
+- Application-level adapter → WebSocket E2E coverage is available.
+- Basic `/healthz` and `/readyz` endpoints are available.
 - Physical device input and reconnect policy remain a separate block.
 
 ## Release criteria

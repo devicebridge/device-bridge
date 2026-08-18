@@ -22,6 +22,13 @@ import (
 
 const shutdownTimeout = 5 * time.Second
 
+type application struct {
+	bridge   *bridge.Bridge
+	adapters []*scanner.ChannelAdapter
+	listener net.Listener
+	server   *http.Server
+}
+
 func main() {
 	cfg, err := config.Load()
 	if err != nil {
@@ -38,33 +45,20 @@ func main() {
 }
 
 func runApplication(ctx context.Context, cfg *config.Config) error {
-	listener, err := net.Listen("tcp", cfg.ListenAddr())
-	if err != nil {
-		return fmt.Errorf("listen %s: %w", cfg.ListenAddr(), err)
-	}
-
-	b := bridge.New()
-	adapters, err := configureSources(b, cfg)
+	app, err := newApplication(cfg)
 	if err != nil {
 		return err
 	}
-	defer func() {
-		for _, adapter := range adapters {
-			adapter.Close()
-		}
-	}()
-	srv := server.New()
-	srv.Handle("/ws", websocket.NewHandler(b.Hub()))
-	httpServer := &http.Server{Handler: srv.Handler()}
+	defer app.closeAdapters()
 
 	runtimeCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
 	bridgeDone := make(chan error, 1)
-	go func() { bridgeDone <- b.Run(runtimeCtx) }()
+	go func() { bridgeDone <- app.bridge.Run(runtimeCtx) }()
 
 	serveDone := make(chan error, 1)
-	go func() { serveDone <- httpServer.Serve(listener) }()
+	go func() { serveDone <- app.server.Serve(app.listener) }()
 
 	var (
 		appErr         error
@@ -94,14 +88,38 @@ func runApplication(ctx context.Context, cfg *config.Config) error {
 		appErr = bridgeErr
 	}
 
-	b.Hub().Shutdown()
+	app.bridge.Hub().Shutdown()
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer shutdownCancel()
-	if err := httpServer.Shutdown(shutdownCtx); err != nil && appErr == nil {
+	if err := app.server.Shutdown(shutdownCtx); err != nil && appErr == nil {
 		appErr = fmt.Errorf("http graceful shutdown: %w", err)
 	}
 
 	return appErr
+}
+
+func newApplication(cfg *config.Config) (*application, error) {
+	listener, err := net.Listen("tcp", cfg.ListenAddr())
+	if err != nil {
+		return nil, fmt.Errorf("listen %s: %w", cfg.ListenAddr(), err)
+	}
+
+	b := bridge.New()
+	adapters, err := configureSources(b, cfg)
+	if err != nil {
+		listener.Close()
+		return nil, err
+	}
+	srv := server.New()
+	srv.Handle("/ws", websocket.NewHandler(b.Hub()))
+	httpServer := &http.Server{Handler: srv.Handler()}
+	return &application{bridge: b, adapters: adapters, listener: listener, server: httpServer}, nil
+}
+
+func (a *application) closeAdapters() {
+	for _, adapter := range a.adapters {
+		adapter.Close()
+	}
 }
 
 func configureSources(b *bridge.Bridge, cfg *config.Config) ([]*scanner.ChannelAdapter, error) {

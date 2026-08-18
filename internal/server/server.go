@@ -2,6 +2,11 @@ package server
 
 import "net/http"
 
+const (
+	HealthPath = "/healthz"
+	ReadyPath  = "/readyz"
+)
+
 // Server provides HTTP routing.
 type Server struct {
 	mux *http.ServeMux
@@ -9,9 +14,16 @@ type Server struct {
 
 // New creates a new HTTP server.
 func New() *Server {
-	return &Server{
+	s := &Server{
 		mux: http.NewServeMux(),
 	}
+	s.Handle(HealthPath, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	s.Handle(ReadyPath, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusOK)
+	}))
+	return s
 }
 
 // Handle registers an HTTP handler.

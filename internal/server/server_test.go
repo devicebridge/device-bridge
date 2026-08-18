@@ -57,3 +57,15 @@ func TestNotFound(t *testing.T) {
 		t.Fatalf("unexpected status code: %d", rec.Code)
 	}
 }
+
+func TestHealthAndReady(t *testing.T) {
+	s := New()
+	for _, path := range []string{HealthPath, ReadyPath} {
+		req := httptest.NewRequest(http.MethodGet, path, nil)
+		rec := httptest.NewRecorder()
+		s.Handler().ServeHTTP(rec, req)
+		if rec.Code != http.StatusOK {
+			t.Fatalf("%s returned %d", path, rec.Code)
+		}
+	}
+}
