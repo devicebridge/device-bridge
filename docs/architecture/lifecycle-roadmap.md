@@ -29,6 +29,12 @@
 - OS device opening, serial settings, PTY integration, and reconnect policy remain separate.
 - `DEVICE_BRIDGE_SCANNER_PATH` can open a serial-compatible path; PTY/socat manual validation is documented.
 - Serial baud/reconnect settings are validated and a cancellable reconnect adapter is covered by unit tests.
+
+## HID integration in progress
+
+- Linux keyboard-like input adapter is implemented for `/dev/input/event*` compatible streams.
+- Blocking input reads are cancellation-safe.
+- `uinput` integration and device discovery remain separate Linux-specific steps.
 - Physical device input and reconnect policy remain a separate block.
 
 ## Release criteria
