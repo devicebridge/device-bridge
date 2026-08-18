@@ -14,16 +14,18 @@ Merged
 
 ## Проблема
 
-`Close()` использовал `mu.Lock()` — тот же mutex, что и `Send()`. Если `Send()` блокировался на `conn.WriteMessage()`, `Close()` не мог получить mutex и закрыть соединение.
+Синхронный `Send()` мог блокировать Hub внутри `conn.WriteMessage()`, если клиент перестал читать сообщения. Это удерживало путь рассылки и осложняло shutdown.
 
 ---
 
 ## Решение
 
-- `Close()` использует `sync.Mutex.TryLock()` — если mutex свободен, отправляет Close frame.
-- Если mutex занят — пропускает Close frame и сразу вызывает `conn.Close()`.
-- `conn.Close()` разблокирует зависший `WriteMessage()` в `Send()`.
-- `sync.Once` гарантирует идемпотентность.
+- `Client` использует bounded outbound queue размером 16 сообщений.
+- `Send()` только сериализует и помещает сообщение в очередь, не выполняя сетевую запись синхронно.
+- Отдельная writer goroutine выполняет `WriteMessage()`.
+- Переполненная очередь возвращает `ErrQueueFull`; Hub удаляет и закрывает такого клиента.
+- `Close()` останавливает writer и закрывает WebSocket-соединение.
+- `sync.Once` гарантирует идемпотентность shutdown.
 
 ---
 
@@ -31,13 +33,13 @@ Merged
 
 | Тест | Проверка |
 |---|---|
-| `TestCloseDoesNotWaitForMutex` | Close не блокируется при удержании mutex |
 | `TestCloseIdempotent` | Повторный Close без паники |
 | `TestSendAfterClose` | Send после Close возвращает ошибку |
 | `TestConcurrentSendAndClose` | Конкурентные Send + Close без паники и гонок |
+| `TestSendReturnsWhenOutboundQueueIsFull` | Переполненная очередь не блокирует Send |
 
 ---
 
 ## Результат
 
-`Client.Close()` больше не ждёт завершения блокированного `Send()` — закрывает соединение напрямую.
+Медленный WebSocket-клиент больше не блокирует Hub: запись выполняется в отдельной goroutine, а переполнение bounded queue приводит к удалению клиента.

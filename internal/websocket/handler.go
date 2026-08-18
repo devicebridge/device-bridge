@@ -32,6 +32,7 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 
 	h.hub.Register(client)
 	defer h.hub.Unregister(client)
+	defer client.Close()
 
 	select {
 	case <-h.hub.Done():

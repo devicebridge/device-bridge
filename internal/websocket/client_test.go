@@ -2,6 +2,7 @@ package websocket
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -110,44 +111,6 @@ func TestSend(t *testing.T) {
 	if received.Payload != expected.Payload {
 		t.Fatalf("payload mismatch: expected %q, got %q", expected.Payload, received.Payload)
 	}
-}
-
-func TestCloseDoesNotWaitForMutex(t *testing.T) {
-	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		upgrader := websocket.Upgrader{}
-		conn, err := upgrader.Upgrade(w, r, nil)
-		if err != nil {
-			t.Error(err)
-			return
-		}
-		conn.ReadMessage()
-	}))
-	defer srv.Close()
-
-	url := "ws" + strings.TrimPrefix(srv.URL, "http")
-	clientConn, _, err := websocket.DefaultDialer.Dial(url, nil)
-	if err != nil {
-		t.Fatal(err)
-	}
-	defer clientConn.Close()
-
-	c := NewClient(clientConn)
-
-	c.mu.Lock()
-
-	closeDone := make(chan struct{})
-	go func() {
-		c.Close()
-		close(closeDone)
-	}()
-
-	select {
-	case <-closeDone:
-	case <-time.After(5 * time.Second):
-		t.Fatal("Close() blocked on mutex held by Send")
-	}
-
-	c.mu.Unlock()
 }
 
 func TestCloseIdempotent(t *testing.T) {
@@ -263,5 +226,18 @@ func TestConcurrentSendAndClose(t *testing.T) {
 	case <-done:
 	case <-time.After(5 * time.Second):
 		t.Fatal("concurrent Send+Close did not complete")
+	}
+}
+
+func TestSendReturnsWhenOutboundQueueIsFull(t *testing.T) {
+	c := &Client{
+		outbound: make(chan []byte, 1),
+		done:     make(chan struct{}),
+	}
+	c.outbound <- []byte("already queued")
+
+	err := c.Send(message.Message{Payload: "next"})
+	if !errors.Is(err, ErrQueueFull) {
+		t.Fatalf("expected ErrQueueFull, got %v", err)
 	}
 }
