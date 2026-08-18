@@ -109,7 +109,7 @@ WebSocket endpoint: `ws://localhost:8080/ws`
 Health endpoints:
 
 - `GET /healthz` — process health;
-- `GET /readyz` — HTTP runtime readiness.
+- `GET /readyz` — application readiness; returns `503` until runtime startup and during shutdown.
 
 Delivery is at-most-once. WebSocket clients have bounded outbound queues; a slow client is disconnected when its queue is full rather than blocking other clients.
 

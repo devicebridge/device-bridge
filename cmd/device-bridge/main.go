@@ -27,6 +27,7 @@ type application struct {
 	adapters []*scanner.ChannelAdapter
 	listener net.Listener
 	server   *http.Server
+	router   *server.Server
 }
 
 func main() {
@@ -59,6 +60,7 @@ func runApplication(ctx context.Context, cfg *config.Config) error {
 
 	serveDone := make(chan error, 1)
 	go func() { serveDone <- app.server.Serve(app.listener) }()
+	app.router.SetReady(true)
 
 	var (
 		appErr         error
@@ -89,6 +91,7 @@ func runApplication(ctx context.Context, cfg *config.Config) error {
 	}
 
 	app.bridge.Hub().Shutdown()
+	app.router.SetReady(false)
 	shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), shutdownTimeout)
 	defer shutdownCancel()
 	if err := app.server.Shutdown(shutdownCtx); err != nil && appErr == nil {
@@ -113,7 +116,7 @@ func newApplication(cfg *config.Config) (*application, error) {
 	srv := server.New()
 	srv.Handle("/ws", websocket.NewHandler(b.Hub()))
 	httpServer := &http.Server{Handler: srv.Handler()}
-	return &application{bridge: b, adapters: adapters, listener: listener, server: httpServer}, nil
+	return &application{bridge: b, adapters: adapters, listener: listener, server: httpServer, router: srv}, nil
 }
 
 func (a *application) closeAdapters() {

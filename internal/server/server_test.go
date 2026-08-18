@@ -60,12 +60,24 @@ func TestNotFound(t *testing.T) {
 
 func TestHealthAndReady(t *testing.T) {
 	s := New()
-	for _, path := range []string{HealthPath, ReadyPath} {
+	for _, path := range []string{HealthPath} {
 		req := httptest.NewRequest(http.MethodGet, path, nil)
 		rec := httptest.NewRecorder()
 		s.Handler().ServeHTTP(rec, req)
 		if rec.Code != http.StatusOK {
 			t.Fatalf("%s returned %d", path, rec.Code)
 		}
+	}
+	req := httptest.NewRequest(http.MethodGet, ReadyPath, nil)
+	rec := httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusServiceUnavailable {
+		t.Fatalf("not-ready returned %d", rec.Code)
+	}
+	s.SetReady(true)
+	rec = httptest.NewRecorder()
+	s.Handler().ServeHTTP(rec, req)
+	if rec.Code != http.StatusOK {
+		t.Fatalf("ready returned %d", rec.Code)
 	}
 }

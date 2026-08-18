@@ -1,6 +1,9 @@
 package server
 
-import "net/http"
+import (
+	"net/http"
+	"sync/atomic"
+)
 
 const (
 	HealthPath = "/healthz"
@@ -9,7 +12,8 @@ const (
 
 // Server provides HTTP routing.
 type Server struct {
-	mux *http.ServeMux
+	mux   *http.ServeMux
+	ready atomic.Bool
 }
 
 // New creates a new HTTP server.
@@ -21,9 +25,18 @@ func New() *Server {
 		w.WriteHeader(http.StatusOK)
 	}))
 	s.Handle(ReadyPath, http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if !s.ready.Load() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
 		w.WriteHeader(http.StatusOK)
 	}))
 	return s
+}
+
+// SetReady changes whether the application is ready to serve traffic.
+func (s *Server) SetReady(ready bool) {
+	s.ready.Store(ready)
 }
 
 // Handle registers an HTTP handler.
