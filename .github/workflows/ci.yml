@@ -43,3 +43,17 @@ jobs:
           go-version-file: go.mod
 
       - run: go test -race ./...
+
+  serial-integration:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - run: sudo apt-get update
+      - run: sudo apt-get install -y socat
+      - run: go test -tags=integration ./internal/source/scanner

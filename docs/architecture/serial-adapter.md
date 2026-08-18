@@ -29,3 +29,5 @@ Run the application with `DEVICE_BRIDGE_SOURCES=scanner-main` and `DEVICE_BRIDGE
 ```bash
 printf '1234567890123\n' > /tmp/device-bridge-injector
 ```
+
+The Linux CI integration test uses the same PTY model with a temporary `socat` process. It is isolated behind the `integration` build tag, so the cross-platform unit test suite does not require Linux PTYs or `socat`.
