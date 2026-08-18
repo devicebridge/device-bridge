@@ -2,7 +2,7 @@
 
 ## Статус
 
-In progress
+Merged
 
 ---
 
@@ -24,4 +24,4 @@ In progress
 ## Проверки
 
 - Конкурентные операции `Registry` покрыты тестом `TestConcurrentRegistryAccess`.
-- Полный suite и race detector должны проходить перед переводом документа в статус `Merged`.
+- Полный suite и race detector проходят после всех исправлений.
