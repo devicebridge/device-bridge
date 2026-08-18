@@ -7,8 +7,31 @@ import (
 	"testing"
 	"time"
 
+	"github.com/devicebridge/device-bridge/internal/bridge"
 	"github.com/devicebridge/device-bridge/internal/config"
 )
+
+func TestConfigureSources(t *testing.T) {
+	b := bridge.New()
+	cfg := &config.Config{Sources: []string{"scanner-main"}}
+
+	if err := configureSources(b, cfg); err != nil {
+		t.Fatalf("configureSources failed: %v", err)
+	}
+
+	if src, err := b.Registry().Create("scanner-main"); err != nil || src == nil {
+		t.Fatalf("scanner source was not registered: source=%v err=%v", src, err)
+	}
+}
+
+func TestConfigureSourcesRejectsUnknownSource(t *testing.T) {
+	b := bridge.New()
+	cfg := &config.Config{Sources: []string{"unknown"}}
+
+	if err := configureSources(b, cfg); err == nil {
+		t.Fatal("expected unknown source error")
+	}
+}
 
 func TestRunApplicationRejectsOccupiedPort(t *testing.T) {
 	listener, err := net.Listen("tcp", "127.0.0.1:0")

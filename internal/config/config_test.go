@@ -44,6 +44,27 @@ func TestLoadFromEnv(t *testing.T) {
 	}
 }
 
+func TestLoadSourcesFromEnv(t *testing.T) {
+	t.Setenv("DEVICE_BRIDGE_SOURCES", "scanner-main, scanner-secondary")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatalf("unexpected error: %v", err)
+	}
+
+	if len(cfg.Sources) != 2 || cfg.Sources[0] != "scanner-main" || cfg.Sources[1] != "scanner-secondary" {
+		t.Fatalf("unexpected sources: %#v", cfg.Sources)
+	}
+}
+
+func TestLoadRejectsEmptySourceName(t *testing.T) {
+	t.Setenv("DEVICE_BRIDGE_SOURCES", "scanner-main,,scanner-secondary")
+
+	if _, err := Load(); err == nil {
+		t.Fatal("expected empty source name error")
+	}
+}
+
 func TestLoadInvalidPort(t *testing.T) {
 	testCases := []string{
 		"abc",

@@ -15,6 +15,8 @@ import (
 	"github.com/devicebridge/device-bridge/internal/bridge"
 	"github.com/devicebridge/device-bridge/internal/config"
 	"github.com/devicebridge/device-bridge/internal/server"
+	"github.com/devicebridge/device-bridge/internal/source"
+	"github.com/devicebridge/device-bridge/internal/source/scanner"
 	"github.com/devicebridge/device-bridge/internal/websocket"
 )
 
@@ -42,6 +44,9 @@ func runApplication(ctx context.Context, cfg *config.Config) error {
 	}
 
 	b := bridge.New()
+	if err := configureSources(b, cfg); err != nil {
+		return err
+	}
 	srv := server.New()
 	srv.Handle("/ws", websocket.NewHandler(b.Hub()))
 	httpServer := &http.Server{Handler: srv.Handler()}
@@ -91,4 +96,22 @@ func runApplication(ctx context.Context, cfg *config.Config) error {
 	}
 
 	return appErr
+}
+
+func configureSources(b *bridge.Bridge, cfg *config.Config) error {
+	for _, name := range cfg.Sources {
+		input := make(chan scanner.Input)
+		switch name {
+		case "scanner-main", "scanner-secondary":
+			sourceID := name
+			if err := b.Registry().Register(name, func() source.Source {
+				return scanner.New(sourceID, input)
+			}); err != nil {
+				return err
+			}
+		default:
+			return fmt.Errorf("unknown source %q", name)
+		}
+	}
+	return nil
 }

@@ -93,6 +93,9 @@ Bridge.Run() возвращает ошибку
 |---|---|---|
 | `DEVICE_BRIDGE_HTTP_HOST` | HTTP listen host | `0.0.0.0` |
 | `DEVICE_BRIDGE_HTTP_PORT` | HTTP listen port | `8080` |
+| `DEVICE_BRIDGE_SOURCES` | Comma-separated source names | empty |
+
+Supported source names are `scanner-main` and `scanner-secondary`. Source input adapters are the next integration step; configuring a source starts its lifecycle and keeps the application running until shutdown.
 
 ## Быстрый старт
 

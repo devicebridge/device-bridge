@@ -12,6 +12,12 @@
 - Testable application orchestration for bind errors and cancellation.
 - Logging of Bridge delivery failures.
 
+## Source integration in progress
+
+- Application configuration now accepts `DEVICE_BRIDGE_SOURCES`.
+- The application bootstrap registers the supported scanner source names.
+- Physical device input adapters and reconnect policy remain a separate block.
+
 ## Release criteria
 
 - `go test -race ./...` passes.

@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"strconv"
+	"strings"
 )
 
 const (
@@ -14,6 +15,7 @@ const (
 type Config struct {
 	HTTPHost string
 	HTTPPort int
+	Sources  []string
 }
 
 func Load() (*Config, error) {
@@ -37,6 +39,16 @@ func Load() (*Config, error) {
 		}
 
 		cfg.HTTPPort = port
+	}
+
+	if sources := os.Getenv("DEVICE_BRIDGE_SOURCES"); sources != "" {
+		for _, name := range strings.Split(sources, ",") {
+			name = strings.TrimSpace(name)
+			if name == "" {
+				return nil, fmt.Errorf("invalid DEVICE_BRIDGE_SOURCES: empty source name")
+			}
+			cfg.Sources = append(cfg.Sources, name)
+		}
 	}
 
 	return cfg, nil
