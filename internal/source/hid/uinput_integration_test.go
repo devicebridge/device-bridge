@@ -53,6 +53,9 @@ func TestAdapterWithUInput(t *testing.T) {
 	eventPath := waitForEventDevice(t)
 	input, err := os.OpenFile(eventPath, os.O_RDONLY, 0)
 	if err != nil {
+		if os.IsPermission(err) {
+			t.Skipf("cannot read uinput event device %s: %v", eventPath, err)
+		}
 		t.Fatal(err)
 	}
 	adapter := New(input, 1)
@@ -114,8 +117,15 @@ func waitForEventDevice(t *testing.T) string {
 	for time.Now().Before(deadline) {
 		paths, _ := filepath.Glob("/dev/input/event*")
 		for _, path := range paths {
-			if info, err := os.Stat(path); err == nil && info.Mode()&os.ModeCharDevice != 0 {
-				return path
+			namePath := filepath.Join("/sys/class/input", filepath.Base(path), "device", "name")
+			name, err := os.ReadFile(namePath)
+			if err != nil {
+				continue
+			}
+			if string(name) == uiDevName+"\n" {
+				if info, err := os.Stat(path); err == nil && info.Mode()&os.ModeCharDevice != 0 {
+					return path
+				}
 			}
 		}
 		time.Sleep(10 * time.Millisecond)

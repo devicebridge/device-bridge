@@ -68,4 +68,4 @@ jobs:
           go-version-file: go.mod
       - run: sudo modprobe uinput || true
       - run: sudo chmod 666 /dev/uinput || true
-      - run: go test -tags=integration ./internal/source/hid
+      - run: sudo go test -tags=integration ./internal/source/hid
