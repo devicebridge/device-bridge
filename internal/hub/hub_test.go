@@ -153,6 +153,26 @@ func TestBroadcastRemovesFailedClient(t *testing.T) {
 	}
 }
 
+func TestBroadcastContinuesAfterClientFailure(t *testing.T) {
+	h := New()
+	expected := errors.New("send failed")
+	failed := &mockClient{err: expected}
+	healthy := &mockClient{}
+	h.Register(failed)
+	h.Register(healthy)
+
+	err := h.Broadcast(message.Message{Payload: "data"})
+	if !errors.Is(err, expected) {
+		t.Fatalf("expected joined send error, got %v", err)
+	}
+	if healthy.last.Payload != "data" {
+		t.Fatal("healthy client did not receive message after another client failed")
+	}
+	if h.Count() != 1 {
+		t.Fatalf("expected failed client to be removed, got %d clients", h.Count())
+	}
+}
+
 func TestBroadcastFailureAndShutdownCloseClientOnce(t *testing.T) {
 	h := New()
 	client := &closeCountingClient{err: errors.New("send failed")}

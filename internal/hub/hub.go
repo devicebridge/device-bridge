@@ -2,6 +2,7 @@ package hub
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -88,7 +89,8 @@ func (h *Hub) WaitForCount(ctx context.Context, target int) error {
 	}
 }
 
-// Broadcast sends a message to all registered clients.
+// Broadcast sends a message to all registered clients. Failed clients are
+// removed and closed, but do not prevent delivery to healthy clients.
 func (h *Hub) Broadcast(msg message.Message) error {
 	h.mu.RLock()
 
@@ -106,15 +108,16 @@ func (h *Hub) Broadcast(msg message.Message) error {
 
 	h.mu.RUnlock()
 
+	var sendErrors []error
 	for _, client := range clients {
 		if err := client.Send(msg); err != nil {
 			h.Unregister(client)
 			h.closeClient(client)
-			return err
+			sendErrors = append(sendErrors, err)
 		}
 	}
 
-	return nil
+	return errors.Join(sendErrors...)
 }
 
 // Shutdown closes the hub and closes all registered clients.
