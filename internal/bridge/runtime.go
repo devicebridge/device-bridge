@@ -2,6 +2,7 @@ package bridge
 
 import (
 	"context"
+	"log"
 	"sync"
 
 	"github.com/devicebridge/device-bridge/internal/message"
@@ -51,12 +52,16 @@ func (b *Bridge) Run(ctx context.Context) error {
 		for {
 			select {
 			case msg := <-messages:
-				_ = b.hub.Broadcast(msg)
+				if err := b.hub.Broadcast(msg); err != nil {
+					log.Printf("bridge: message broadcast failed: %v", err)
+				}
 			case <-b.bus.Done():
 				for {
 					select {
 					case msg := <-messages:
-						_ = b.hub.Broadcast(msg)
+						if err := b.hub.Broadcast(msg); err != nil {
+							log.Printf("bridge: message broadcast failed during shutdown: %v", err)
+						}
 					default:
 						return
 					}

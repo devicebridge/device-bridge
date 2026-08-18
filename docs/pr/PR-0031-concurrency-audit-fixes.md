@@ -17,6 +17,7 @@ In progress
 - Закрытие клиента дедуплицируется внутри Hub, поэтому конкурентные `Broadcast()` и `Shutdown()` не вызывают `Client.Close()` повторно.
 - `Hub.Broadcast()` продолжает рассылку здоровым клиентам и возвращает агрегированную ошибку после обработки всех клиентов.
 - WebSocket Client использует bounded outbound queue и отдельную writer goroutine; медленный клиент не блокирует Hub.
+- Ошибки рассылки из Bridge dispatcher логируются вместо безусловного игнорирования.
 - `Bridge` больше не вызывает `WaitGroup.Add` из запущенного coordinator; счетчик устанавливается до `go`, что устраняет race `Add`/`Wait`.
 - `Bridge.Run()` дожидается source → Bus forwarders перед `Bus.Close()`, устраняя потерю сообщений при быстром завершении source.
 
