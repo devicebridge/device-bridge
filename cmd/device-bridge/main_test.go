@@ -15,9 +15,11 @@ func TestConfigureSources(t *testing.T) {
 	b := bridge.New()
 	cfg := &config.Config{Sources: []string{"scanner-main"}}
 
-	if err := configureSources(b, cfg); err != nil {
+	adapters, err := configureSources(b, cfg)
+	if err != nil {
 		t.Fatalf("configureSources failed: %v", err)
 	}
+	defer adapters[0].Close()
 
 	if src, err := b.Registry().Create("scanner-main"); err != nil || src == nil {
 		t.Fatalf("scanner source was not registered: source=%v err=%v", src, err)
@@ -28,7 +30,7 @@ func TestConfigureSourcesRejectsUnknownSource(t *testing.T) {
 	b := bridge.New()
 	cfg := &config.Config{Sources: []string{"unknown"}}
 
-	if err := configureSources(b, cfg); err == nil {
+	if _, err := configureSources(b, cfg); err == nil {
 		t.Fatal("expected unknown source error")
 	}
 }

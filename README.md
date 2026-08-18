@@ -95,7 +95,7 @@ Bridge.Run() возвращает ошибку
 | `DEVICE_BRIDGE_HTTP_PORT` | HTTP listen port | `8080` |
 | `DEVICE_BRIDGE_SOURCES` | Comma-separated source names | empty |
 
-Supported source names are `scanner-main` and `scanner-secondary`. Source input adapters are the next integration step; configuring a source starts its lifecycle and keeps the application running until shutdown.
+Supported source names are `scanner-main` and `scanner-secondary`. Each configured scanner uses a bounded transport-neutral input adapter. Physical device adapters can publish into the same scanner input contract.
 
 ## Быстрый старт
 

@@ -44,9 +44,15 @@ func runApplication(ctx context.Context, cfg *config.Config) error {
 	}
 
 	b := bridge.New()
-	if err := configureSources(b, cfg); err != nil {
+	adapters, err := configureSources(b, cfg)
+	if err != nil {
 		return err
 	}
+	defer func() {
+		for _, adapter := range adapters {
+			adapter.Close()
+		}
+	}()
 	srv := server.New()
 	srv.Handle("/ws", websocket.NewHandler(b.Hub()))
 	httpServer := &http.Server{Handler: srv.Handler()}
@@ -98,20 +104,22 @@ func runApplication(ctx context.Context, cfg *config.Config) error {
 	return appErr
 }
 
-func configureSources(b *bridge.Bridge, cfg *config.Config) error {
+func configureSources(b *bridge.Bridge, cfg *config.Config) ([]*scanner.ChannelAdapter, error) {
+	adapters := make([]*scanner.ChannelAdapter, 0, len(cfg.Sources))
 	for _, name := range cfg.Sources {
-		input := make(chan scanner.Input)
 		switch name {
 		case "scanner-main", "scanner-secondary":
+			adapter := scanner.NewChannelAdapter(100)
 			sourceID := name
 			if err := b.Registry().Register(name, func() source.Source {
-				return scanner.New(sourceID, input)
+				return scanner.New(sourceID, adapter.Input())
 			}); err != nil {
-				return err
+				return nil, err
 			}
+			adapters = append(adapters, adapter)
 		default:
-			return fmt.Errorf("unknown source %q", name)
+			return nil, fmt.Errorf("unknown source %q", name)
 		}
 	}
-	return nil
+	return adapters, nil
 }

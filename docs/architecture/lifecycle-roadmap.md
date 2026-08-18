@@ -16,7 +16,8 @@
 
 - Application configuration now accepts `DEVICE_BRIDGE_SOURCES`.
 - The application bootstrap registers the supported scanner source names.
-- Physical device input adapters and reconnect policy remain a separate block.
+- The channel input adapter is available for tests and future transport adapters.
+- Physical device input and reconnect policy remain a separate block.
 
 ## Release criteria
 
