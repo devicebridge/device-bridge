@@ -111,6 +111,8 @@ Health endpoints:
 - `GET /healthz` — process health;
 - `GET /readyz` — HTTP runtime readiness.
 
+Delivery is at-most-once. WebSocket clients have bounded outbound queues; a slow client is disconnected when its queue is full rather than blocking other clients.
+
 ## Статус
 
 Проект находится в активной разработке.

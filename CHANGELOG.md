@@ -1,6 +1,6 @@
 # Changelog
 
-## Lifecycle — завершён (PR-0017 … PR-0029)
+## Lifecycle — завершён (PR-0017 … PR-0031)
 
 ### PR-0017 Runtime Lifecycle
 `Bridge.Run(ctx context.Context) error` — управляемый lifecycle через context. Source ошибки сохраняются, отменяют runtime.
@@ -15,10 +15,10 @@ Hub.Shutdown(), Client.Close(), HTTP Server.Shutdown() — корректное 
 `Bus.PublishCtx(ctx, msg)` — прерывание блокирующей публикации при cancellation. HTTP startup error вызывает shutdown.
 
 ### PR-0021 WebSocket Client Shutdown
-`Client.Close()` использует `TryLock` — не ждёт блокированный `Send()`. `conn.Close()` разблокирует запись.
+WebSocket Client использует bounded outbound queue и отдельную writer goroutine. Медленный клиент не блокирует Hub.
 
 ### PR-0022 Forwarder Lifecycle
-`<-hubDone` — Bridge.Run ждёт завершения Bus→Hub forwarder перед возвратом.
+Bridge synchronizes source forwarders before closing the Bus. Bus→Hub dispatcher stops on Bus shutdown.
 
 ### PR-0023 Source Creation Errors
 Ошибки `Registry.Create` сохраняются как runtime error, отменяют остальные Sources.
@@ -40,3 +40,6 @@ Hub.Shutdown(), Client.Close(), HTTP Server.Shutdown() — корректное 
 
 ### PR-0029 Concurrency Hardening
 Стресс-тесты 100× с race detector для всех пакетов. Убран последний `time.Sleep`.
+
+### PR-0031 Concurrency Audit Fixes
+Bus, Bridge, Registry, Hub and WebSocket client lifecycle hardened. Added bounded client queues, application lifecycle tests, health endpoints and delivery contract documentation.

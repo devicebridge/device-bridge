@@ -19,6 +19,7 @@
 - The channel input adapter is available for tests and future transport adapters.
 - Application-level adapter → WebSocket E2E coverage is available.
 - Basic `/healthz` and `/readyz` endpoints are available.
+- Delivery guarantees and bounded backpressure policy are documented.
 - Physical device input and reconnect policy remain a separate block.
 
 ## Release criteria
