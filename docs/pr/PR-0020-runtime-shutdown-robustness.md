@@ -67,7 +67,7 @@ application exits
 ### Bridge Runtime
 - Forwarder Source → Bus использует `PublishCtx` вместо `Publish`. При отмене контекста forwarder немедленно завершается.
 - Hub forwarder слушает `Bus.Done()` и завершается после shutdown Bus, если не находится внутри блокирующего `Hub.Broadcast()`.
-- `Bridge.Run()` не ждёт hub forwarder: это сохраняет bounded shutdown runtime при заблокированном downstream.
+- `Bridge.Run()` ждёт завершения source → Bus forwarders, но не ждёт hub forwarder: это сохраняет bounded shutdown runtime при отмене и заблокированном downstream.
 - `Hub.Shutdown()` по-прежнему необходим для разблокировки уже выполняющегося `Client.Send()`.
 
 ### main.go

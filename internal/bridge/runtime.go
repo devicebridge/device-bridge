@@ -22,9 +22,10 @@ func (b *Bridge) Run(ctx context.Context) error {
 	defer cancel()
 
 	var (
-		wg       sync.WaitGroup
-		firstErr error
-		errOnce  sync.Once
+		wg          sync.WaitGroup
+		forwarderWG sync.WaitGroup
+		firstErr    error
+		errOnce     sync.Once
 	)
 
 	for _, name := range b.registry.Names() {
@@ -42,7 +43,7 @@ func (b *Bridge) Run(ctx context.Context) error {
 		}
 
 		wg.Add(1)
-		go b.connectSource(runtimeCtx, src, &wg, &firstErr, &errOnce, cancel)
+		go b.connectSource(runtimeCtx, src, &wg, &forwarderWG, &firstErr, &errOnce, cancel)
 	}
 
 	go func() {
@@ -65,13 +66,14 @@ func (b *Bridge) Run(ctx context.Context) error {
 	}()
 
 	wg.Wait()
+	forwarderWG.Wait()
 
 	b.bus.Close()
 
 	return firstErr
 }
 
-func (b *Bridge) connectSource(ctx context.Context, src source.Source, wg *sync.WaitGroup, firstErr *error, errOnce *sync.Once, cancel context.CancelFunc) {
+func (b *Bridge) connectSource(ctx context.Context, src source.Source, wg *sync.WaitGroup, forwarderWG *sync.WaitGroup, firstErr *error, errOnce *sync.Once, cancel context.CancelFunc) {
 	defer wg.Done()
 
 	out := make(chan message.Message, 100)
@@ -82,7 +84,9 @@ func (b *Bridge) connectSource(ctx context.Context, src source.Source, wg *sync.
 		sourceDone <- src.Run(ctx, out)
 	}()
 
+	forwarderWG.Add(1)
 	go func() {
+		defer forwarderWG.Done()
 		for msg := range out {
 			if err := b.bus.PublishCtx(ctx, msg); err != nil {
 				return

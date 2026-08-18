@@ -14,6 +14,7 @@ In progress
 - `Registry` защищает factories через `sync.RWMutex`.
 - `Hub.Shutdown()` очищает реестр клиентов до вызова `Client.Close()`.
 - `Bridge` больше не вызывает `WaitGroup.Add` из запущенного coordinator; счетчик устанавливается до `go`, что устраняет race `Add`/`Wait`.
+- `Bridge.Run()` дожидается source → Bus forwarders перед `Bus.Close()`, устраняя потерю сообщений при быстром завершении source.
 
 ## Проверки
 
