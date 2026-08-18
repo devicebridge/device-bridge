@@ -51,6 +51,7 @@ func (a *SerialAdapter) Run(ctx context.Context) error {
 				return nil
 			}
 			if result.err != nil {
+				_ = a.input.Publish(context.Background(), Input{Err: result.err})
 				return result.err
 			}
 		}

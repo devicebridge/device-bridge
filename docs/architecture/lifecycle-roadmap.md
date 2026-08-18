@@ -27,6 +27,7 @@
 - Cross-platform line-oriented `SerialAdapter` is implemented over `io.ReadCloser`.
 - Unit tests cover framing, EOF, port errors, and cancellation.
 - OS device opening, serial settings, PTY integration, and reconnect policy remain separate.
+- `DEVICE_BRIDGE_SCANNER_PATH` can open a serial-compatible path; PTY/socat manual validation is documented.
 - Physical device input and reconnect policy remain a separate block.
 
 ## Release criteria

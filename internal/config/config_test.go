@@ -57,6 +57,18 @@ func TestLoadSourcesFromEnv(t *testing.T) {
 	}
 }
 
+func TestLoadScannerPathFromEnv(t *testing.T) {
+	t.Setenv("DEVICE_BRIDGE_SCANNER_PATH", "/tmp/scanner")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ScannerPath != "/tmp/scanner" {
+		t.Fatalf("expected scanner path, got %q", cfg.ScannerPath)
+	}
+}
+
 func TestLoadRejectsEmptySourceName(t *testing.T) {
 	t.Setenv("DEVICE_BRIDGE_SOURCES", "scanner-main,,scanner-secondary")
 

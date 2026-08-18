@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"net"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -38,6 +39,29 @@ func TestConfigureSourcesRejectsUnknownSource(t *testing.T) {
 	if _, err := configureSources(b, cfg); err == nil {
 		t.Fatal("expected unknown source error")
 	}
+}
+
+func TestNewApplicationWithSerialPath(t *testing.T) {
+	file, err := os.CreateTemp(t.TempDir(), "scanner-*")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer file.Close()
+
+	app, err := newApplication(&config.Config{
+		HTTPHost:    "127.0.0.1",
+		HTTPPort:    0,
+		Sources:     []string{"scanner-main"},
+		ScannerPath: file.Name(),
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer app.closeAdapters()
+	if len(app.serials) != 1 {
+		t.Fatalf("expected one serial adapter, got %d", len(app.serials))
+	}
+	app.listener.Close()
 }
 
 func TestRunApplicationRejectsOccupiedPort(t *testing.T) {

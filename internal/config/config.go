@@ -13,9 +13,10 @@ const (
 )
 
 type Config struct {
-	HTTPHost string
-	HTTPPort int
-	Sources  []string
+	HTTPHost    string
+	HTTPPort    int
+	Sources     []string
+	ScannerPath string
 }
 
 func Load() (*Config, error) {
@@ -50,6 +51,7 @@ func Load() (*Config, error) {
 			cfg.Sources = append(cfg.Sources, name)
 		}
 	}
+	cfg.ScannerPath = os.Getenv("DEVICE_BRIDGE_SCANNER_PATH")
 
 	return cfg, nil
 }

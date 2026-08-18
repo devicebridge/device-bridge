@@ -25,6 +25,7 @@ const shutdownTimeout = 5 * time.Second
 type application struct {
 	bridge   *bridge.Bridge
 	adapters []*scanner.ChannelAdapter
+	serials  []*scanner.SerialAdapter
 	listener net.Listener
 	server   *http.Server
 	router   *server.Server
@@ -56,6 +57,12 @@ func runApplication(ctx context.Context, cfg *config.Config) error {
 	defer cancel()
 
 	bridgeDone := make(chan error, 1)
+	serialDone := make(chan error, len(app.serials))
+	for _, serial := range app.serials {
+		go func(serial *scanner.SerialAdapter) {
+			serialDone <- serial.Run(runtimeCtx)
+		}(serial)
+	}
 	go func() { bridgeDone <- app.bridge.Run(runtimeCtx) }()
 
 	serveDone := make(chan error, 1)
@@ -86,6 +93,9 @@ func runApplication(ctx context.Context, cfg *config.Config) error {
 	if !bridgeDoneSeen {
 		bridgeErr = <-bridgeDone
 	}
+	for range app.serials {
+		<-serialDone
+	}
 	if appErr == nil && bridgeErr != nil && !errors.Is(bridgeErr, context.Canceled) {
 		appErr = bridgeErr
 	}
@@ -108,7 +118,16 @@ func newApplication(cfg *config.Config) (*application, error) {
 	}
 
 	b := bridge.New()
-	adapters, err := configureSources(b, cfg)
+	sourceCfg := *cfg
+	if cfg.ScannerPath != "" {
+		sourceCfg.Sources = make([]string, 0, len(cfg.Sources))
+		for _, name := range cfg.Sources {
+			if name != "scanner-main" {
+				sourceCfg.Sources = append(sourceCfg.Sources, name)
+			}
+		}
+	}
+	adapters, err := configureSources(b, &sourceCfg)
 	if err != nil {
 		listener.Close()
 		return nil, err
@@ -116,12 +135,32 @@ func newApplication(cfg *config.Config) (*application, error) {
 	srv := server.New()
 	srv.Handle("/ws", websocket.NewHandler(b.Hub()))
 	httpServer := &http.Server{Handler: srv.Handler()}
-	return &application{bridge: b, adapters: adapters, listener: listener, server: httpServer, router: srv}, nil
+	serials := make([]*scanner.SerialAdapter, 0)
+	if cfg.ScannerPath != "" {
+		port, err := os.Open(cfg.ScannerPath)
+		if err != nil {
+			listener.Close()
+			return nil, fmt.Errorf("open scanner path %s: %w", cfg.ScannerPath, err)
+		}
+		serial := scanner.NewSerialAdapter(port, 100)
+		serials = append(serials, serial)
+		if err := b.Registry().Register("scanner-main", func() source.Source {
+			return scanner.New("scanner-main", serial.Input())
+		}); err != nil {
+			serial.Close()
+			listener.Close()
+			return nil, err
+		}
+	}
+	return &application{bridge: b, adapters: adapters, serials: serials, listener: listener, server: httpServer, router: srv}, nil
 }
 
 func (a *application) closeAdapters() {
 	for _, adapter := range a.adapters {
 		adapter.Close()
+	}
+	for _, serial := range a.serials {
+		serial.Close()
 	}
 }
 
