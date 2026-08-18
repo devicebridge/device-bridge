@@ -105,6 +105,8 @@ Serial integration uses a line-oriented `io.ReadCloser` boundary. The adapter su
 
 When `DEVICE_BRIDGE_SCANNER_PATH` is set, `scanner-main` reads from that path. In the development VM it can point to a PTY endpoint created with `socat`. Alternatively, on Linux, `DEVICE_BRIDGE_HID_PATH` can point to `/dev/input/eventN` for a keyboard-like scanner. Serial and HID paths are mutually exclusive. The cross-platform core validates baud and reconnect settings; OS-specific port configuration remains in the device opener.
 
+The HID keyboard mapping supports US-layout letters, digits, punctuation, Shift, Caps Lock, keypad digits, Space, Backspace, and Enter. GS/FNC1 replacement remains scanner configuration and application-level parsing policy.
+
 ## Быстрый старт
 
 ```bash

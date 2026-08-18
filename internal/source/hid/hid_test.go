@@ -35,6 +35,27 @@ func TestAdapterTranslatesDigits(t *testing.T) {
 	<-done
 }
 
+func TestKeyCodeCharacterUSLayout(t *testing.T) {
+	cases := []struct {
+		code  uint16
+		state keyboardState
+		want  byte
+	}{
+		{30, keyboardState{}, 'a'},
+		{30, keyboardState{shift: true}, 'A'},
+		{30, keyboardState{caps: true}, 'A'},
+		{2, keyboardState{shift: true}, '!'},
+		{12, keyboardState{shift: true}, '_'},
+		{53, keyboardState{shift: true}, '?'},
+	}
+	for _, test := range cases {
+		got, ok := keyCodeCharacter(test.code, test.state)
+		if !ok || got != test.want {
+			t.Fatalf("code %d state %+v: got %q/%v, want %q", test.code, test.state, got, ok, test.want)
+		}
+	}
+}
+
 func TestAdapterCancellationClosesDevice(t *testing.T) {
 	device := &blockingDevice{done: make(chan struct{})}
 	a := New(device, 1)

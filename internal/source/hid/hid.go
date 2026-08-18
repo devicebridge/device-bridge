@@ -18,6 +18,10 @@ const (
 	evSyn          = 0
 	keyRelease     = 0
 	keyEnter       = 28
+	keyLeftShift   = 42
+	keyRightShift  = 54
+	keyCapsLock    = 58
+	keyBackspace   = 14
 )
 
 var ErrUnsupportedEvent = errors.New("unsupported Linux input event")
@@ -46,6 +50,7 @@ func (a *Adapter) Input() <-chan scanner.Input { return a.input.Input() }
 func (a *Adapter) Run(ctx context.Context) error {
 	defer a.input.Close()
 	var value []byte
+	state := keyboardState{}
 	readDone := make(chan readResult, 1)
 	go a.readLoop(readDone)
 	for {
@@ -66,7 +71,18 @@ func (a *Adapter) Run(ctx context.Context) error {
 		typeID := binary.LittleEndian.Uint16(event[16:18])
 		code := binary.LittleEndian.Uint16(event[18:20])
 		keyValue := binary.LittleEndian.Uint32(event[20:24])
-		if typeID != evKey || keyValue != keyRelease {
+		if typeID != evKey {
+			continue
+		}
+		if code == keyLeftShift || code == keyRightShift {
+			state.shift = keyValue != keyRelease
+			continue
+		}
+		if code == keyCapsLock && keyValue == keyRelease {
+			state.caps = !state.caps
+			continue
+		}
+		if keyValue != keyRelease {
 			continue
 		}
 		if code == keyEnter {
@@ -78,8 +94,14 @@ func (a *Adapter) Run(ctx context.Context) error {
 			}
 			continue
 		}
-		if digit, ok := keyCodeDigit(code); ok {
-			value = append(value, digit)
+		if code == keyBackspace {
+			if len(value) > 0 {
+				value = value[:len(value)-1]
+			}
+			continue
+		}
+		if character, ok := keyCodeCharacter(code, state); ok {
+			value = append(value, character)
 		}
 	}
 }
@@ -108,12 +130,49 @@ func (a *Adapter) Close() {
 	})
 }
 
-func keyCodeDigit(code uint16) (byte, bool) {
+type keyboardState struct {
+	shift bool
+	caps  bool
+}
+
+func keyCodeCharacter(code uint16, state keyboardState) (byte, bool) {
 	if code >= 2 && code <= 11 {
 		if code == 11 {
-			return '0', true
+			return shifted('0', ')', state.shift)
 		}
-		return byte('1' + code - 2), true
+		plain := byte('1' + code - 2)
+		shiftedValue := byte("!@#$%^&*("[code-2])
+		return shifted(plain, shiftedValue, state.shift)
 	}
-	return 0, false
+	letters := map[uint16]byte{
+		16: 'q', 17: 'w', 18: 'e', 19: 'r', 20: 't', 21: 'y', 22: 'u', 23: 'i', 24: 'o', 25: 'p',
+		30: 'a', 31: 's', 32: 'd', 33: 'f', 34: 'g', 35: 'h', 36: 'j', 37: 'k', 38: 'l',
+		44: 'z', 45: 'x', 46: 'c', 47: 'v', 48: 'b', 49: 'n', 50: 'm',
+	}
+	if plain, ok := letters[code]; ok {
+		if state.shift != state.caps {
+			plain -= 'a' - 'A'
+		}
+		return plain, true
+	}
+	characters := map[uint16][2]byte{
+		12: {'-', '_'}, 13: {'=', '+'}, 26: {'[', '{'}, 27: {']', '}'},
+		39: {';', ':'}, 40: {'\'', '"'}, 41: {'`', '~'}, 43: {'\\', '|'},
+		51: {',', '<'}, 52: {'.', '>'}, 53: {'/', '?'}, 57: {' ', ' '},
+		71: {'7', '7'}, 72: {'8', '8'}, 73: {'9', '9'}, 75: {'4', '4'}, 76: {'5', '5'},
+		77: {'6', '6'}, 79: {'1', '1'}, 80: {'2', '2'}, 81: {'3', '3'}, 82: {'0', '0'},
+		83: {'.', '.'},
+	}
+	values, ok := characters[code]
+	if !ok {
+		return 0, false
+	}
+	return shifted(values[0], values[1], state.shift)
+}
+
+func shifted(plain, withShift byte, shift bool) (byte, bool) {
+	if shift {
+		return withShift, true
+	}
+	return plain, true
 }
