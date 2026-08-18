@@ -123,6 +123,7 @@ func (h *Hub) Shutdown() {
 		for client := range h.clients {
 			clients = append(clients, client)
 		}
+		h.clients = make(map[Client]struct{})
 		h.mu.Unlock()
 
 		for _, client := range clients {

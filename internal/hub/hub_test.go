@@ -163,8 +163,8 @@ func TestShutdown(t *testing.T) {
 
 	<-closed
 
-	if h.Count() != 1 {
-		t.Fatal("shutdown should not unregister clients")
+	if h.Count() != 0 {
+		t.Fatal("shutdown should remove clients from the registry")
 	}
 
 	select {

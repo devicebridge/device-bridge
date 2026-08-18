@@ -12,6 +12,7 @@ In progress
 - `Bridge` допускает только один запуск runtime.
 - Bus → Hub dispatcher завершает ожидание новых сообщений по `Bus.Done()` и дренирует накопленный буфер.
 - `Registry` защищает factories через `sync.RWMutex`.
+- `Hub.Shutdown()` очищает реестр клиентов до вызова `Client.Close()`.
 
 ## Проверки
 
