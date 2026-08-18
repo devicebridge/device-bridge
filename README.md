@@ -97,6 +97,8 @@ Bridge.Run() возвращает ошибку
 
 Supported source names are `scanner-main` and `scanner-secondary`. Each configured scanner uses a bounded transport-neutral input adapter. Physical device adapters can publish into the same scanner input contract.
 
+Serial integration uses a line-oriented `io.ReadCloser` boundary. The adapter supports `LF`, `CRLF`, final values before `EOF`, and cancellation of blocking reads. Device opening and serial port configuration are platform-specific and are not part of the cross-platform core.
+
 ## Быстрый старт
 
 ```bash

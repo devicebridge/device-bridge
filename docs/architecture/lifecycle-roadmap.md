@@ -21,6 +21,12 @@
 - Basic `/healthz` and `/readyz` endpoints are available.
 - `/readyz` reflects runtime readiness instead of being a static liveness response.
 - Delivery guarantees and bounded backpressure policy are documented.
+
+## Serial integration in progress
+
+- Cross-platform line-oriented `SerialAdapter` is implemented over `io.ReadCloser`.
+- Unit tests cover framing, EOF, port errors, and cancellation.
+- OS device opening, serial settings, PTY integration, and reconnect policy remain separate.
 - Physical device input and reconnect policy remain a separate block.
 
 ## Release criteria
