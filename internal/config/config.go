@@ -13,10 +13,12 @@ const (
 )
 
 type Config struct {
-	HTTPHost    string
-	HTTPPort    int
-	Sources     []string
-	ScannerPath string
+	HTTPHost              string
+	HTTPPort              int
+	Sources               []string
+	ScannerPath           string
+	ScannerBaud           int
+	ScannerReconnectDelay int
 }
 
 func Load() (*Config, error) {
@@ -52,6 +54,22 @@ func Load() (*Config, error) {
 		}
 	}
 	cfg.ScannerPath = os.Getenv("DEVICE_BRIDGE_SCANNER_PATH")
+	cfg.ScannerBaud = 9600
+	cfg.ScannerReconnectDelay = 1
+	if value := os.Getenv("DEVICE_BRIDGE_SCANNER_BAUD"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed <= 0 {
+			return nil, fmt.Errorf("invalid DEVICE_BRIDGE_SCANNER_BAUD: %q", value)
+		}
+		cfg.ScannerBaud = parsed
+	}
+	if value := os.Getenv("DEVICE_BRIDGE_SCANNER_RECONNECT_SECONDS"); value != "" {
+		parsed, err := strconv.Atoi(value)
+		if err != nil || parsed < 0 {
+			return nil, fmt.Errorf("invalid DEVICE_BRIDGE_SCANNER_RECONNECT_SECONDS: %q", value)
+		}
+		cfg.ScannerReconnectDelay = parsed
+	}
 
 	return cfg, nil
 }

@@ -69,6 +69,19 @@ func TestLoadScannerPathFromEnv(t *testing.T) {
 	}
 }
 
+func TestLoadSerialSettings(t *testing.T) {
+	t.Setenv("DEVICE_BRIDGE_SCANNER_BAUD", "115200")
+	t.Setenv("DEVICE_BRIDGE_SCANNER_RECONNECT_SECONDS", "3")
+
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ScannerBaud != 115200 || cfg.ScannerReconnectDelay != 3 {
+		t.Fatalf("unexpected serial settings: baud=%d reconnect=%d", cfg.ScannerBaud, cfg.ScannerReconnectDelay)
+	}
+}
+
 func TestLoadRejectsEmptySourceName(t *testing.T) {
 	t.Setenv("DEVICE_BRIDGE_SOURCES", "scanner-main,,scanner-secondary")
 

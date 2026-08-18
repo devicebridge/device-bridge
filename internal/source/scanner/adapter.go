@@ -30,6 +30,10 @@ func (a *ChannelAdapter) Input() <-chan Input {
 	return a.input
 }
 
+func (a *ChannelAdapter) Done() <-chan struct{} {
+	return a.done
+}
+
 func (a *ChannelAdapter) Publish(ctx context.Context, input Input) error {
 	select {
 	case <-a.done:

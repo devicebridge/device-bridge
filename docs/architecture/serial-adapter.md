@@ -10,6 +10,7 @@
 - A final non-empty value before `EOF` is delivered.
 - Port errors are returned to the source runtime.
 - Context cancellation closes the port so a blocking read can be interrupted.
+- `ReconnectingAdapter` retries opening and reading after recoverable port failures using a cancellable delay.
 - The adapter does not open device paths itself. Opening/configuring a serial device belongs to the application/device integration layer.
 
 This keeps unit tests independent from serial hardware, PTYs, `socat`, and operating-system-specific device APIs.
