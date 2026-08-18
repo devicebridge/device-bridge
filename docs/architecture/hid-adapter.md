@@ -11,3 +11,5 @@ The Linux-only `source/hid` adapter reads keyboard-like events from a Linux inpu
 - Does not implement low-level USB HID descriptors, `hidraw`, or libusb transfers.
 
 `uinput` can provide a virtual Linux input device for integration tests. Real USB HID protocol behavior still requires hardware passthrough or a USB gadget fixture.
+
+The tagged Linux integration test creates a temporary `uinput` device when `/dev/uinput` is available and skips cleanly otherwise. The regular cross-platform test suite does not require `uinput`.
