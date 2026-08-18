@@ -10,19 +10,21 @@ import (
 
 // Hub broadcasts messages to registered clients.
 type Hub struct {
-	mu      sync.RWMutex
-	clients map[Client]struct{}
-	closed  chan struct{}
-	once    sync.Once
-	notify  chan struct{}
+	mu            sync.RWMutex
+	clients       map[Client]struct{}
+	closedClients map[Client]struct{}
+	closed        chan struct{}
+	once          sync.Once
+	notify        chan struct{}
 }
 
 // New creates a new Hub.
 func New() *Hub {
 	return &Hub{
-		clients: make(map[Client]struct{}),
-		closed:  make(chan struct{}),
-		notify:  make(chan struct{}),
+		clients:       make(map[Client]struct{}),
+		closedClients: make(map[Client]struct{}),
+		closed:        make(chan struct{}),
+		notify:        make(chan struct{}),
 	}
 }
 
@@ -106,6 +108,8 @@ func (h *Hub) Broadcast(msg message.Message) error {
 
 	for _, client := range clients {
 		if err := client.Send(msg); err != nil {
+			h.Unregister(client)
+			h.closeClient(client)
 			return err
 		}
 	}
@@ -127,9 +131,21 @@ func (h *Hub) Shutdown() {
 		h.mu.Unlock()
 
 		for _, client := range clients {
-			client.Close()
+			h.closeClient(client)
 		}
 	})
+}
+
+func (h *Hub) closeClient(client Client) {
+	h.mu.Lock()
+	if _, alreadyClosed := h.closedClients[client]; alreadyClosed {
+		h.mu.Unlock()
+		return
+	}
+	h.closedClients[client] = struct{}{}
+	h.mu.Unlock()
+
+	client.Close()
 }
 
 // Done returns a channel that is closed when the hub is shut down.

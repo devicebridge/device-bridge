@@ -3,6 +3,8 @@ package hub
 import (
 	"context"
 	"errors"
+	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -125,6 +127,65 @@ func TestBroadcastError(t *testing.T) {
 	if !errors.Is(err, expected) {
 		t.Fatal("unexpected error")
 	}
+}
+
+func TestBroadcastRemovesFailedClient(t *testing.T) {
+	h := New()
+	expected := errors.New("send failed")
+	failed := &mockClient{err: expected}
+	healthy := &mockClient{}
+	h.Register(failed)
+	h.Register(healthy)
+
+	err := h.Broadcast(message.Message{Payload: "first"})
+	if !errors.Is(err, expected) {
+		t.Fatalf("expected send error, got %v", err)
+	}
+	if h.Count() != 1 {
+		t.Fatalf("expected failed client to be removed, got %d clients", h.Count())
+	}
+
+	if err := h.Broadcast(message.Message{Payload: "second"}); err != nil {
+		t.Fatalf("healthy client should receive later broadcasts, got %v", err)
+	}
+	if healthy.last.Payload != "second" {
+		t.Fatalf("healthy client received %q, want %q", healthy.last.Payload, "second")
+	}
+}
+
+func TestBroadcastFailureAndShutdownCloseClientOnce(t *testing.T) {
+	h := New()
+	client := &closeCountingClient{err: errors.New("send failed")}
+	h.Register(client)
+
+	var wg sync.WaitGroup
+	wg.Add(2)
+	go func() {
+		defer wg.Done()
+		_ = h.Broadcast(message.Message{})
+	}()
+	go func() {
+		defer wg.Done()
+		h.Shutdown()
+	}()
+	wg.Wait()
+
+	if got := atomic.LoadInt32(&client.closed); got != 1 {
+		t.Fatalf("expected one Close call, got %d", got)
+	}
+}
+
+type closeCountingClient struct {
+	err    error
+	closed int32
+}
+
+func (c *closeCountingClient) Send(message.Message) error {
+	return c.err
+}
+
+func (c *closeCountingClient) Close() {
+	atomic.AddInt32(&c.closed, 1)
 }
 
 func TestConcurrentAccess(t *testing.T) {
